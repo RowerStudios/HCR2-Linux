@@ -1,0 +1,93 @@
+diff --git a/include/compat.h b/include/compat.h
+index 1abf474..cfb269c 100644
+--- a/include/compat.h
++++ b/include/compat.h
+@@ -1,5 +1,88 @@
+ #include <android/versioning.h>
+ #include <string.h>
++#ifdef __cplusplus
++// Modern glibc/GCC <stdatomic.h> does not define C11 _Atomic or the *_atomic
++// helper functions when included from C++. Provide the C++ <atomic> mapping
++// here (mirrors bionic's own stdatomic.h) so the bionic linker sources,
++// which use _Atomic(...) members together with atomic_*() calls, compile.
++#include <atomic>
++#define _Atomic(t) std::atomic<t>
++using std::atomic_is_lock_free;
++using std::atomic_init;
++using std::atomic_store;
++using std::atomic_store_explicit;
++using std::atomic_load;
++using std::atomic_load_explicit;
++using std::atomic_exchange;
++using std::atomic_exchange_explicit;
++using std::atomic_compare_exchange_strong;
++using std::atomic_compare_exchange_strong_explicit;
++using std::atomic_compare_exchange_weak;
++using std::atomic_compare_exchange_weak_explicit;
++using std::atomic_fetch_add;
++using std::atomic_fetch_add_explicit;
++using std::atomic_fetch_sub;
++using std::atomic_fetch_sub_explicit;
++using std::atomic_fetch_or;
++using std::atomic_fetch_or_explicit;
++using std::atomic_fetch_xor;
++using std::atomic_fetch_xor_explicit;
++using std::atomic_fetch_and;
++using std::atomic_fetch_and_explicit;
++using std::atomic_flag_clear;
++using std::atomic_flag_clear_explicit;
++using std::atomic_flag_test_and_set;
++using std::atomic_flag_test_and_set_explicit;
++using std::memory_order;
++using std::memory_order_relaxed;
++using std::memory_order_consume;
++using std::memory_order_acquire;
++using std::memory_order_release;
++using std::memory_order_acq_rel;
++using std::memory_order_seq_cst;
++using std::atomic_thread_fence;
++using std::atomic_signal_fence;
++// Provide the <stdatomic.h> typedef aliases as well, since glibc's C++
++// stdatomic.h does not define them (e.g. bionic core/liblog/logger.h uses
++// atomic_int).
++#include <cstdint>
++#include <cstddef>
++#include <cwchar>
++typedef _Atomic(bool) atomic_bool;
++typedef _Atomic(char) atomic_char;
++typedef _Atomic(signed char) atomic_schar;
++typedef _Atomic(unsigned char) atomic_uchar;
++typedef _Atomic(short) atomic_short;
++typedef _Atomic(unsigned short) atomic_ushort;
++typedef _Atomic(int) atomic_int;
++typedef _Atomic(unsigned int) atomic_uint;
++typedef _Atomic(long) atomic_long;
++typedef _Atomic(unsigned long) atomic_ulong;
++typedef _Atomic(long long) atomic_llong;
++typedef _Atomic(unsigned long long) atomic_ullong;
++typedef _Atomic(wchar_t) atomic_wchar_t;
++typedef _Atomic(int_least8_t) atomic_int_least8_t;
++typedef _Atomic(uint_least8_t) atomic_uint_least8_t;
++typedef _Atomic(int_least16_t) atomic_int_least16_t;
++typedef _Atomic(uint_least16_t) atomic_uint_least16_t;
++typedef _Atomic(int_least32_t) atomic_int_least32_t;
++typedef _Atomic(uint_least32_t) atomic_uint_least32_t;
++typedef _Atomic(int_least64_t) atomic_int_least64_t;
++typedef _Atomic(uint_least64_t) atomic_uint_least64_t;
++typedef _Atomic(int_fast8_t) atomic_int_fast8_t;
++typedef _Atomic(uint_fast8_t) atomic_uint_fast8_t;
++typedef _Atomic(int_fast16_t) atomic_int_fast16_t;
++typedef _Atomic(uint_fast16_t) atomic_uint_fast16_t;
++typedef _Atomic(int_fast32_t) atomic_int_fast32_t;
++typedef _Atomic(uint_fast32_t) atomic_uint_fast32_t;
++typedef _Atomic(int_fast64_t) atomic_int_fast64_t;
++typedef _Atomic(uint_fast64_t) atomic_uint_fast64_t;
++typedef _Atomic(intptr_t) atomic_intptr_t;
++typedef _Atomic(uintptr_t) atomic_uintptr_t;
++typedef _Atomic(size_t) atomic_size_t;
++typedef _Atomic(ptrdiff_t) atomic_ptrdiff_t;
++typedef _Atomic(max_align_t) atomic_max_align_t;
++#endif
+ #define PAGE_SIZE 4096
+ #define PAGE_MASK (~(PAGE_SIZE - 1))
+ #if !defined(__APPLE__) && !defined(__FreeBSD__)

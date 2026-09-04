@@ -1,0 +1,41 @@
+diff --git a/include/game_window.h b/include/game_window.h
+index ac63829..ebca207 100644
+--- a/include/game_window.h
++++ b/include/game_window.h
+@@ -98,6 +98,8 @@ public:
+ 
+     virtual void show() = 0;
+ 
++    virtual void hide() {}
++
+     virtual void close() = 0;
+ 
+     virtual void pollEvents() = 0;
+diff --git a/src/window_sdl3.cpp b/src/window_sdl3.cpp
+index 722ecb7..7e20e3b 100644
+--- a/src/window_sdl3.cpp
++++ b/src/window_sdl3.cpp
+@@ -102,6 +102,10 @@ void SDL3GameWindow::show() {
+     SDL_ShowWindow(window);
+ }
+ 
++void SDL3GameWindow::hide() {
++    SDL_HideWindow(window);
++}
++
+ void SDL3GameWindow::close() {
+     if(window) {
+         onClose();
+diff --git a/src/window_sdl3.h b/src/window_sdl3.h
+index 38a74d1..f5dafc3 100644
+--- a/src/window_sdl3.h
++++ b/src/window_sdl3.h
+@@ -50,6 +50,8 @@ public:
+ 
+     void show() override;
+ 
++    void hide() override;
++
+     void close() override;
+ 
+     void pollEvents() override;

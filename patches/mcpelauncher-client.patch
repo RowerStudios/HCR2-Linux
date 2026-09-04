@@ -1,0 +1,1159 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5c50f36..492a3dc 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -7,9 +7,10 @@ find_package(CURL REQUIRED)
+ git_commit_hash(${CMAKE_CURRENT_SOURCE_DIR} CLIENT_GIT_COMMIT_HASH)
+ configure_file(src/build_info.h.in ${CMAKE_CURRENT_BINARY_DIR}/build_info/build_info.h)
+ 
+-add_executable(mcpelauncher-client src/main.cpp src/main.h src/window_callbacks.cpp src/window_callbacks.h src/xbox_live_helper.cpp src/xbox_live_helper.h src/splitscreen_patch.cpp src/splitscreen_patch.h src/strafe_sprint_patch.cpp src/strafe_sprint_patch.h src/fake_swappygl.cpp src/fake_swappygl.h src/cll_upload_auth_step.cpp src/cll_upload_auth_step.h src/gl_core_patch.cpp src/gl_core_patch.h src/hbui_patch.cpp src/hbui_patch.h src/utf8_util.h src/shader_error_patch.cpp src/shader_error_patch.h src/jni/jni_descriptors.cpp src/jni/java_types.h src/jni/main_activity.cpp src/jni/main_activity.h src/jni/asset_manager.cpp src/jni/asset_manager.h src/jni/playfab.cpp src/jni/playfab.h src/jni/store.cpp src/jni/store.h src/jni/cert_manager.cpp src/jni/cert_manager.h src/jni/http_stub.cpp src/jni/http_stub.h src/jni/package_source.cpp src/jni/package_source.h src/jni/jni_support.h src/jni/jni_support.cpp src/jni/fmod.h src/jni/fmod.cpp src/fake_looper.cpp src/fake_looper.h src/fake_window.cpp src/fake_window.h src/fake_assetmanager.cpp src/fake_assetmanager.h src/fake_egl.cpp src/fake_egl.h src/fake_inputqueue.cpp src/fake_inputqueue.h src/symbols.cpp src/symbols.h src/text_input_handler.cpp src/text_input_handler.h src/jni/xbox_live.cpp src/jni/xbox_live.h src/core_patches.cpp src/core_patches.h  src/thread_mover.cpp src/thread_mover.h src/jni/lib_http_client.cpp src/jni/lib_http_client.h src/jni/lib_http_client_websocket.cpp src/jni/lib_http_client_websocket.h src/jni/accounts.cpp src/jni/accounts.h src/jni/arrays.cpp src/jni/arrays.h src/jni/jbase64.cpp src/jni/jbase64.h src/jni/locale.cpp src/jni/locale.h src/jni/securerandom.cpp src/jni/securerandom.h src/jni/signature.cpp src/jni/signature.h src/jni/uuid.cpp src/jni/uuid.h src/jni/webview.cpp src/jni/webview.h src/util.cpp src/util.h src/xal_webview_factory.cpp src/xal_webview_factory.h src/xal_webview.h src/settings.cpp src/settings.h )
++add_executable(mcpelauncher-client src/main.cpp src/main.h src/app_config.cpp src/app_config.h src/window_callbacks.cpp src/window_callbacks.h src/xbox_live_helper.cpp src/xbox_live_helper.h src/splitscreen_patch.cpp src/splitscreen_patch.h src/strafe_sprint_patch.cpp src/strafe_sprint_patch.h src/fake_swappygl.cpp src/fake_swappygl.h src/cll_upload_auth_step.cpp src/cll_upload_auth_step.h src/gl_core_patch.cpp src/gl_core_patch.h src/hbui_patch.cpp src/hbui_patch.h src/utf8_util.h src/shader_error_patch.cpp src/shader_error_patch.h src/jni/jni_descriptors.cpp src/jni/java_types.h src/jni/main_activity.cpp src/jni/main_activity.h src/jni/asset_manager.cpp src/jni/asset_manager.h src/jni/playfab.cpp src/jni/playfab.h src/jni/store.cpp src/jni/store.h src/jni/cert_manager.cpp src/jni/cert_manager.h src/jni/http_stub.cpp src/jni/http_stub.h src/jni/package_source.cpp src/jni/package_source.h src/jni/jni_support.h src/jni/jni_support.cpp src/jni/cocos2dx_activity.h src/jni/cocos2dx_activity.cpp src/jni/fmod.h src/jni/fmod.cpp src/fake_looper.cpp src/fake_looper.h src/fake_window.cpp src/fake_window.h src/fake_assetmanager.cpp src/fake_assetmanager.h src/fake_egl.cpp src/fake_egl.h src/fake_inputqueue.cpp src/fake_inputqueue.h src/symbols.cpp src/symbols.h src/text_input_handler.cpp src/text_input_handler.h src/jni/xbox_live.cpp src/jni/xbox_live.h src/core_patches.cpp src/core_patches.h  src/thread_mover.cpp src/thread_mover.h src/jni/lib_http_client.cpp src/jni/lib_http_client.h src/jni/lib_http_client_websocket.cpp src/jni/lib_http_client_websocket.h src/jni/accounts.cpp src/jni/accounts.h src/jni/arrays.cpp src/jni/arrays.h src/jni/jbase64.cpp src/jni/jbase64.h src/jni/locale.cpp src/jni/locale.h src/jni/securerandom.cpp src/jni/securerandom.h src/jni/signature.cpp src/jni/signature.h src/jni/uuid.cpp src/jni/uuid.h src/jni/webview.cpp src/jni/webview.h src/util.cpp src/util.h src/xal_webview_factory.cpp src/xal_webview_factory.h src/xal_webview.h src/settings.cpp src/settings.h )
+ target_link_libraries(mcpelauncher-client logger properties-parser mcpelauncher-core gamewindow filepicker msa-daemon-client daemon-server-utils cll-telemetry argparser baron android-support-headers libc-shim mcpelauncher-apkinfo ${CURL_LIBRARIES})
+ target_include_directories(mcpelauncher-client PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/build_info/ ${CURL_INCLUDE_DIRS})
++target_compile_definitions(mcpelauncher-client PRIVATE _Nullable= _Nonnull= _Null_unspecified=)
+ 
+ option(NO_OPENSSL "disable openssl code" OFF)
+ if (NO_OPENSSL)
+diff --git a/src/app_config.cpp b/src/app_config.cpp
+new file mode 100644
+index 0000000..02258cd
+--- /dev/null
++++ b/src/app_config.cpp
+@@ -0,0 +1,57 @@
++#include "app_config.h"
++#include <log.h>
++#include <fstream>
++#include <sstream>
++#include <nlohmann/json.hpp>
++
++static AppConfig appConfig;
++static AppConfig* configured = nullptr;
++
++AppConfig& AppConfig::get() {
++    return appConfig;
++}
++
++void AppConfig::loadFromManifest(const ApkInfo& info) {
++    appConfig.package = info.package;
++    appConfig.versionCode = info.versionCode;
++    if(!info.versionName.empty())
++        appConfig.versionName = info.versionName;
++}
++
++void AppConfig::loadFromFile(const std::string& path) {
++    std::ifstream f(path);
++    if(!f.is_open()) {
++        Log::debug("Launcher", "No app config at %s, using defaults", path.c_str());
++        return;
++    }
++    nlohmann::json j;
++    try {
++        j = nlohmann::json::parse(f);
++    } catch(const nlohmann::json::exception& e) {
++        Log::error("Launcher", "Failed to parse app config %s: %s", path.c_str(), e.what());
++        return;
++    }
++
++    if(j.contains("package")) appConfig.package = j.at("package").get<std::string>();
++    if(j.contains("versionName")) appConfig.versionName = j.at("versionName").get<std::string>();
++    if(j.contains("versionCode")) appConfig.versionCode = j.at("versionCode").get<int>();
++    if(j.contains("nativeLibrary")) appConfig.nativeLibrary = j.at("nativeLibrary").get<std::string>();
++    if(j.contains("preloadLibraries")) appConfig.preloadLibraries = j.at("preloadLibraries").get<std::vector<std::string>>();
++    if(j.contains("windowTitle")) appConfig.windowTitle = j.at("windowTitle").get<std::string>();
++    if(j.contains("optionsPath")) appConfig.optionsPath = j.at("optionsPath").get<std::string>();
++    if(j.contains("activityClass")) appConfig.activityClass = j.at("activityClass").get<std::string>();
++    if(j.contains("minecraftPatches")) appConfig.minecraftPatches = j.at("minecraftPatches").get<bool>();
++    if(j.contains("jniMode")) {
++        auto mode = j.at("jniMode").get<std::string>();
++        if(mode == "cocos2dx") {
++            appConfig.jniMode = JniMode::Cocos2dx;
++        } else {
++            appConfig.jniMode = JniMode::Minecraft;
++        }
++    }
++
++    configured = &appConfig;
++    Log::info("Launcher", "App config: package=%s lib=%s mode=%s title=%s",
++              appConfig.package.c_str(), appConfig.nativeLibrary.c_str(),
++              appConfig.jniMode == JniMode::Cocos2dx ? "cocos2dx" : "minecraft", appConfig.windowTitle.c_str());
++}
+\ No newline at end of file
+diff --git a/src/app_config.h b/src/app_config.h
+new file mode 100644
+index 0000000..758253f
+--- /dev/null
++++ b/src/app_config.h
+@@ -0,0 +1,39 @@
++#pragma once
++
++#include <string>
++#include <vector>
++#include <mcpelauncher/apkinfo.h>
++
++// Application mode controlling how the game binary is bootstrapped.
++enum class JniMode {
++    Minecraft,  // com.mojang.minecraftpe native activity (app_glue style)
++    Cocos2dx    // Java-driven Cocos2d-x game (JNI_OnLoad + renderer natives)
++};
++
++// Generic, package-agnostic configuration for which Android app the launcher runs.
++// Defaults to Minecraft; a JSON file in the game directory can override everything.
++struct AppConfig {
++    std::string package = "com.mojang.minecraftpe";
++    std::string versionName;
++    int versionCode = 0;
++
++    // Name of the main native library inside lib/<abi>/ (including the "lib" prefix and ".so" suffix).
++    std::string nativeLibrary = "libminecraftpe";
++    // Additional libraries to preload before the main library (e.g. engine/game plugins).
++    std::vector<std::string> preloadLibraries;
++
++    JniMode jniMode = JniMode::Minecraft;
++
++    std::string windowTitle = "mcpelauncher";
++    // Options file path relative to the primary data directory (-dd).
++    std::string optionsPath = "games/com.mojang/minecraftpe/options.txt";
++    // Whether to apply Minecraft-specific patches (vtables, glcore, xbox, mods, etc.).
++    bool minecraftPatches = true;
++    // FakeJni class name of the main activity (used as the launcher activity).
++    std::string activityClass = "com/mojang/minecraftpe/MainActivity";
++
++    static AppConfig& get();
++    static void loadFromManifest(const ApkInfo& info);
++    // Optional override file inside the game directory (game_dir/app_config.json).
++    static void loadFromFile(const std::string& path);
++};
+\ No newline at end of file
+diff --git a/src/fake_assetmanager.cpp b/src/fake_assetmanager.cpp
+index 0b7fb6d..1b58329 100644
+--- a/src/fake_assetmanager.cpp
++++ b/src/fake_assetmanager.cpp
+@@ -4,6 +4,7 @@
+ #include <FileUtil.h>
+ #include <sys/types.h>
+ #include <dirent.h>
++#include <jni.h>
+ #include <log.h>
+ #include <libc_shim.h>
+ #include <android/compat.h>
+@@ -20,10 +21,13 @@ struct AAssetDir {
+     std::string currentFileName;
+ };
+ 
++FakeAssetManager *FakeAssetManager::instance;
++
+ FakeAssetManager::FakeAssetManager(std::string rootDir) {
+     if(!rootDir.empty() && *rootDir.rbegin() != '/')
+         rootDir += '/';
+     this->rootDir = std::move(rootDir);
++    FakeAssetManager::instance = this;
+ }
+ 
+ namespace fake_assetmanager {
+@@ -154,6 +158,15 @@ const void *AAsset_getBuffer(AAsset *asset) {
+     return asset->buffer.c_str();
+ }
+ 
++int AAsset_openFileDescriptor(AAsset *asset, off_t *outStart, off_t *outLength) {
++    if(outStart)
++        *outStart = 0;
++    if(outLength)
++        *outLength = (off_t)asset->buffer.size();
++    errno = ENOTSUP;
++    return -1;
++}
++
+ void AAssetDir_close(AAssetDir *assetDir) {
+     if(assetDir)
+         closedir(assetDir->dir);
+@@ -185,6 +198,10 @@ const char *AAssetDir_getNextFileName(AAssetDir *assetDir) {
+ 
+ void FakeAssetManager::initHybrisHooks(std::unordered_map<std::string, void *> &syms) {
+     using namespace fake_assetmanager;
++    syms["AAssetManager_fromJava"] = (void *)+[](JNIEnv *env, jobject assetManager) -> AAssetManager * {
++        Log::trace("AAssetManager", "AAssetManager_fromJava -> %p\n", (void*)FakeAssetManager::instance);
++        return (AAssetManager *)FakeAssetManager::instance;
++    };
+     syms["AAssetManager_open"] = (void *)AAssetManager_open;
+     syms["AAssetManager_openDir"] = (void *)AAssetManager_openDir;
+     syms["AAsset_close"] = (void *)AAsset_close;
+@@ -197,6 +214,7 @@ void FakeAssetManager::initHybrisHooks(std::unordered_map<std::string, void *> &
+     syms["AAsset_getRemainingLength64"] = (void *)AAsset_getRemainingLength64;
+     syms["AAsset_getRemainingLength"] = (void *)AAsset_getRemainingLength;
+     syms["AAsset_getBuffer"] = (void *)AAsset_getBuffer;
++    syms["AAsset_openFileDescriptor"] = (void *)AAsset_openFileDescriptor;
+     syms["AAssetDir_close"] = (void *)AAssetDir_close;
+     syms["AAssetDir_rewind"] = (void *)AAssetDir_rewind;
+     syms["AAssetDir_getNextFileName"] = (void *)AAssetDir_getNextFileName;
+diff --git a/src/fake_assetmanager.h b/src/fake_assetmanager.h
+index 09e8146..d70d86e 100644
+--- a/src/fake_assetmanager.h
++++ b/src/fake_assetmanager.h
+@@ -10,6 +10,8 @@ struct AAssetManager;
+ struct FakeAssetManager {
+     std::string rootDir;
+ 
++    static FakeAssetManager *instance;
++
+     FakeAssetManager(std::string rootDir);
+ 
+     static void initHybrisHooks(std::unordered_map<std::string, void *> &syms);
+diff --git a/src/fake_egl.cpp b/src/fake_egl.cpp
+index f7a95b8..aea1619 100644
+--- a/src/fake_egl.cpp
++++ b/src/fake_egl.cpp
+@@ -82,6 +82,7 @@ EGLBoolean eglGetConfigAttrib(EGLDisplay display, EGLConfig config, EGLint attri
+ }
+ 
+ EGLSurface eglCreateWindowSurface(EGLDisplay display, EGLConfig config, EGLNativeWindowType native_window, EGLint const *attrib_list) {
++    Log::trace("FakeEGL", "eglCreateWindowSurface native_window=%p\n", native_window);
+     return native_window;
+ }
+ 
+@@ -90,6 +91,7 @@ EGLBoolean eglDestroySurface(EGLDisplay display, EGLSurface surface) {
+ }
+ 
+ EGLContext eglCreateContext(EGLDisplay display, EGLConfig config, EGLContext share_context, EGLint const *attrib_list) {
++    Log::trace("FakeEGL", "eglCreateContext share=%p\n", (void*)share_context);
+     return (EGLContext *)1;
+ }
+ 
+@@ -98,6 +100,7 @@ EGLBoolean eglDestroyContext(EGLDisplay display, EGLContext context) {
+ }
+ 
+ EGLBoolean eglMakeCurrent(EGLDisplay display, EGLSurface draw, EGLSurface read, EGLContext context) {
++    Log::trace("FakeEGL", "eglMakeCurrent draw=%p read=%p ctx=%p\n", (void*)draw, (void*)read, (void*)context);
+     if(draw != nullptr) {
+         ((GameWindow *)draw)->makeCurrent(true);
+ #ifdef USE_IMGUI
+@@ -111,6 +114,7 @@ EGLBoolean eglMakeCurrent(EGLDisplay display, EGLSurface draw, EGLSurface read,
+ }
+ 
+ EGLBoolean eglSwapBuffers(EGLDisplay display, EGLSurface surface) {
++    Log::trace("FakeEGL", "eglSwapBuffers surface=%p\n", (void*)surface);
+     if(FakeEGL::swapBuffersCallbacksLock.try_lock()) {
+         for(size_t i = 0; i < FakeEGL::swapBuffersCallbacks.size(); i++) {
+             FakeEGL::swapBuffersCallbacks[i].callback(FakeEGL::swapBuffersCallbacks[i].user, display, surface);
+diff --git a/src/fake_looper.cpp b/src/fake_looper.cpp
+index 46814fd..a92d004 100644
+--- a/src/fake_looper.cpp
++++ b/src/fake_looper.cpp
+@@ -1,5 +1,6 @@
+ #include "fake_looper.h"
+ #include "main.h"
++#include "app_config.h"
+ #include "shader_error_patch.h"
+ #include "splitscreen_patch.h"
+ #include "gl_core_patch.h"
+@@ -16,6 +17,7 @@
+ 
+ JniSupport *FakeLooper::jniSupport;
+ thread_local std::unique_ptr<FakeLooper> FakeLooper::currentLooper;
++std::shared_ptr<GameWindow> FakeLooper::sharedDiagnosticWindow;
+ 
+ void FakeLooper::initWindow() {
+     if(!currentLooper) {
+@@ -75,11 +77,22 @@ void FakeLooper::initializeWindow() {
+ #endif
+ 
+     Log::info("Launcher", "Creating window");
+-    associatedWindow = GameWindowManager::getManager()->createWindow("Minecraft",
++    associatedWindow = GameWindowManager::getManager()->createWindow(AppConfig::get().windowTitle.c_str(),
+                                                                      options.windowWidth, options.windowHeight, options.graphicsApi);
++    sharedDiagnosticWindow = associatedWindow;
+     FakeEGL::setupGLOverrides();
+ }
+ 
++std::shared_ptr<GameWindow> FakeLooper::getDiagnosticWindow() {
++    return sharedDiagnosticWindow;
++}
++
++void FakeLooper::hideDiagnosticWindow() {
++    if(sharedDiagnosticWindow) {
++        sharedDiagnosticWindow->hide();
++    }
++}
++
+ void FakeLooper::prepare() {
+     jniSupport->setLooperRunning(true);
+     initializeWindow();
+diff --git a/src/fake_looper.h b/src/fake_looper.h
+index bfdbb7f..16aac48 100644
+--- a/src/fake_looper.h
++++ b/src/fake_looper.h
+@@ -11,6 +11,7 @@ class FakeLooper {
+ private:
+     static JniSupport *jniSupport;
+     static thread_local std::unique_ptr<FakeLooper> currentLooper;
++    static std::shared_ptr<GameWindow> sharedDiagnosticWindow;
+     bool prepared = false;
+     bool textInput = false;
+     int menuSize = 0;
+@@ -62,4 +63,10 @@ public:
+     static void initHybrisHooks(std::unordered_map<std::string, void *> &syms);
+ 
+     static void onGameActivityClose(GameActivity *native);
++
++    // Returns the launcher's diagnostic window (the one used only for GL symbol
++    // setup). Unique across threads so the cocos2d-x path can hide it and leave
++    // only the dedicated game window visible.
++    static std::shared_ptr<GameWindow> getDiagnosticWindow();
++    static void hideDiagnosticWindow();
+ };
+diff --git a/src/jni/cocos2dx_activity.cpp b/src/jni/cocos2dx_activity.cpp
+new file mode 100644
+index 0000000..c072bc2
+--- /dev/null
++++ b/src/jni/cocos2dx_activity.cpp
+@@ -0,0 +1,4 @@
++#include "cocos2dx_activity.h"
++
++// The renderer natives are registered by the engine's JNI_OnLoad.
++// No C++ bodies required here.
+\ No newline at end of file
+diff --git a/src/jni/cocos2dx_activity.h b/src/jni/cocos2dx_activity.h
+new file mode 100644
+index 0000000..0dd7a91
+--- /dev/null
++++ b/src/jni/cocos2dx_activity.h
+@@ -0,0 +1,44 @@
++#pragma once
++
++#include <fake-jni/fake-jni.h>
++#include "main_activity.h"
++#include "asset_manager.h"
++
++// Fake Java classes for a Java-driven Cocos2d-x game (e.g. Hill Climb Racing 2).
++// The engine is entered via JNI_OnLoad + the static renderer natives that the
++// original Java bootstrap (Cocos2dxActivity / Cocos2dxGLSurfaceView / Renderer)
++// would normally call. We provide the same classes and drive them directly.
++
++class Cocos2dxRenderer : public FakeJni::JObject {
++public:
++    DEFINE_CLASS_NAME("org/cocos2dx/lib/Cocos2dxRenderer")
++};
++
++class Cocos2dxActivity : public Activity {
++public:
++    DEFINE_CLASS_NAME("org/cocos2dx/lib/Cocos2dxActivity", Activity)
++
++    std::string storageDirectory;
++
++    std::shared_ptr<FakeJni::JString> getPackageName() {
++        return std::make_shared<FakeJni::JString>("com.fingersoft.hcr2");
++    }
++
++    std::shared_ptr<File> getFilesDir() override {
++        return std::make_shared<File>(storageDirectory);
++    }
++
++    std::shared_ptr<File> getCacheDir() override {
++        return std::make_shared<File>(storageDirectory);
++    }
++
++    std::shared_ptr<AssetManager> getAssets() {
++        return std::make_shared<AssetManager>();
++    }
++};
++
++// The launcher activity declared in the HCR2 AndroidManifest.
++class Hcr2Activity : public Cocos2dxActivity {
++public:
++    DEFINE_CLASS_NAME("com/fingersoft/hcr2/AppActivity", Cocos2dxActivity)
++};
+\ No newline at end of file
+diff --git a/src/jni/jni_descriptors.cpp b/src/jni/jni_descriptors.cpp
+index df2d51b..07f8b08 100644
+--- a/src/jni/jni_descriptors.cpp
++++ b/src/jni/jni_descriptors.cpp
+@@ -1,4 +1,5 @@
+ #include "main_activity.h"
++#include "cocos2dx_activity.h"
+ #include "store.h"
+ #include "xbox_live.h"
+ #include "lib_http_client.h"
+@@ -79,6 +80,15 @@ END_NATIVE_DESCRIPTOR
+ BEGIN_NATIVE_DESCRIPTOR(NativeActivity)
+ END_NATIVE_DESCRIPTOR
+ 
++BEGIN_NATIVE_DESCRIPTOR(Cocos2dxActivity){Constructor<Cocos2dxActivity>{}},
++    {Function<&Cocos2dxActivity::getPackageName>{}, "getPackageName"},
++    {Function<&Cocos2dxActivity::getFilesDir>{}, "getFilesDir"},
++    {Function<&Cocos2dxActivity::getCacheDir>{}, "getCacheDir"}
++END_NATIVE_DESCRIPTOR
++
++BEGIN_NATIVE_DESCRIPTOR(Hcr2Activity){Constructor<Hcr2Activity>{}}
++END_NATIVE_DESCRIPTOR
++
+ BEGIN_NATIVE_DESCRIPTOR(NetworkMonitor)
+ END_NATIVE_DESCRIPTOR
+ 
+diff --git a/src/jni/jni_support.cpp b/src/jni/jni_support.cpp
+index c71fd70..a4891f1 100644
+--- a/src/jni/jni_support.cpp
++++ b/src/jni/jni_support.cpp
+@@ -2,6 +2,7 @@
+ #include <mcpelauncher/path_helper.h>
+ #include <mcpelauncher/linker.h>
+ #include "jni_support.h"
++#include "../app_config.h"
+ #include "xbox_live.h"
+ #include "fmod.h"
+ #include "lib_http_client.h"
+@@ -34,6 +35,29 @@
+ #include "securerandom.h"
+ #include "../settings.h"
+ #include "../main.h"
++#include "../fake_egl.h"
++#include "../window_callbacks.h"
++#include "../fake_inputqueue.h"
++#include "../fake_looper.h"
++#include <fstream>
++#include <dirent.h>
++#include <unistd.h>
++#include <sys/types.h>
++#include <thread>
++#include <atomic>
++#include <chrono>
++#include <ctime>
++#include <cstring>
++#include <cstdlib>
++#include <cerrno>
++#include <fcntl.h>
++#include <cstdio>
++#include <dlfcn.h>
++#include <signal.h>
++#include <ucontext.h>
++#include <execinfo.h>
++#include <pthread.h>
++#include <game_window_manager.h>
+ #include <thread>
+ #include <iostream>
+ #include <fstream>
+@@ -60,6 +84,8 @@ void JniSupport::registerJniClasses() {
+     vm.registerClass<NativeActivity>();
+     vm.registerClass<NetworkMonitor>();
+     vm.registerClass<MainActivity>();
++    vm.registerClass<Cocos2dxActivity>();
++    vm.registerClass<Hcr2Activity>();
+     vm.registerClass<AccountManager>();
+     vm.registerClass<Account>();
+ 
+@@ -228,14 +254,15 @@ void JniSupport::startGame(ANativeActivity_createFunc* activityOnCreate, GameAct
+     vm.attachLibrary("libminecraftpe.so", "", {linker::dlopen, linker::dlsym, linker::dlclose_unlocked});
+     vm.attachLibrary("libPlayFabMultiplayer.so", "", {linker::dlopen, linker::dlsym, linker::dlclose_unlocked});
+ 
+-    activity = std::make_shared<MainActivity>();
++    auto mainActivity = std::make_shared<MainActivity>();
++    activity = mainActivity;
+     activityRef = vm.createGlobalReference(activity);
+ 
+-    activity->textInput = &textInput;
+-    activity->quitCallback = [this]() { requestExitGame(); };
+-    activity->storageDirectory = PathHelper::getPrimaryDataDirectory();
+-    activity->stbi_load_from_memory = (decltype(activity->stbi_load_from_memory))stbiLoadFromMemory;
+-    activity->stbi_image_free = (decltype(activity->stbi_image_free))stbiImageFree;
++    mainActivity->textInput = &textInput;
++    mainActivity->quitCallback = [this]() { requestExitGame(); };
++    mainActivity->storageDirectory = PathHelper::getPrimaryDataDirectory();
++    mainActivity->stbi_load_from_memory = (decltype(mainActivity->stbi_load_from_memory))stbiLoadFromMemory;
++    mainActivity->stbi_image_free = (decltype(mainActivity->stbi_image_free))stbiImageFree;
+ 
+     assetManager = std::make_unique<FakeAssetManager>(PathHelper::getGameDir() + "assets");
+ 
+@@ -315,6 +342,493 @@ void JniSupport::startGame(ANativeActivity_createFunc* activityOnCreate, GameAct
+     }
+ }
+ 
++void JniSupport::startCocos2dGame(void *(*symResolver)(const char *)) {
++    FakeJni::LocalFrame frame(vm);
++
++    // Cocos2d-x engine + game code. JNI_OnLoad registers the natives.
++    // The engine's JNI_OnLoad also calls the game's cocos_android_app_init
++    // which sets up the AppDelegate. attachLibrary runs JNI_OnLoad automatically.
++    vm.attachLibrary("libcocos2dcpp.so", "", {linker::dlopen, linker::dlsym, linker::dlclose_unlocked});
++    vm.attachLibrary("libfingersoft_hcr2.so", "", {linker::dlopen, linker::dlsym, linker::dlclose_unlocked});
++
++    auto cocosActivity = std::make_shared<Hcr2Activity>();
++    this->cocosActivity = cocosActivity;
++    activityRef = vm.createGlobalReference(cocosActivity);
++    cocosActivity->storageDirectory = PathHelper::getPrimaryDataDirectory();
++
++    assetManager = std::make_unique<FakeAssetManager>(PathHelper::getGameDir() + "assets");
++
++    // attachLibrary already ran JNI_OnLoad for libcocos2dcpp.so; no need to call it again.
++    Log::trace("JniSupport", "Cocos2d-x JNI_OnLoad already run via attachLibrary\n");
++
++    int w = options.windowWidth;
++    int h = options.windowHeight;
++
++    // The engine (and game) export their Java-natives as JNI-symbol-name
++    // functions (Java_org_cocos2dx_*), NOT via RegisterNatives. We resolve and
++    // call them directly. Native signatures (standard Cocos2d-x JNI glue):
++    //   nativeSetContext(JNIEnv*, jobject, jobject ctx, jobject amgr)
++    //   nativeSetApkPath(JNIEnv*, jobject, jstring)
++    //   nativeInit(JNIEnv*, jobject, jint w, jint h)
++    //   nativeOnSurfaceChanged(JNIEnv*, jobject, jint w, jint h)
++    //   nativeRender(JNIEnv*, jobject)
++    auto& lifecycleEnv = frame.getJniEnv();
++    JNIEnv* jenv = lifecycleEnv.GetJNIEnv();
++
++    // thiz: natives ignore the receiver; pass the activity object we created.
++    jobject thiz = (jobject)cocosActivity.get();
++
++    auto nativeSetContext = (void(*)(JNIEnv*, jobject, jobject, jobject))symResolver("Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetContext");
++    auto nativeSetApkPath = (void(*)(JNIEnv*, jobject, jstring))symResolver("Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetApkPath");
++    auto nativeInit = (void(*)(JNIEnv*, jobject, jint, jint))symResolver("Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeInit");
++    auto nativeOnSurfaceChanged = (void(*)(JNIEnv*, jobject, jint, jint))symResolver("Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeOnSurfaceChanged");
++    auto nativeRender = (void(*)(JNIEnv*, jobject))symResolver("Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeRender");
++
++    Log::trace("JniSupport", "Resolved natives: setContext=%p apkPath=%p init=%p surfaceChanged=%p render=%p\n",
++        (void*)nativeSetContext, (void*)nativeSetApkPath, (void*)nativeInit, (void*)nativeOnSurfaceChanged, (void*)nativeRender);
++
++    if(!nativeInit) {
++        Log::error("JniSupport", "nativeInit not found\n");
++        return;
++    }
++
++    // Probe the engine's full exported JNI surface: resolve every standard
++    // Cocos2d-x lifecycle/input/helper native name and log which exist so we
++    // know exactly what the Java side is expected to call. dlsym resolves
++    // against the decoded runtime image, so even mangled/obscured symbols
++    // (unlike the packed on-disk file) will show up.
++    {
++        static const char *probeNames[] = {
++            "Java_org_cocos2dx_lib_Cocos2dxActivity_nativeOnPause",
++            "Java_org_cocos2dx_lib_Cocos2dxActivity_nativeOnResume",
++            "Java_org_cocos2dx_lib_Cocos2dxActivity_nativeOnRestart",
++            "Java_org_cocos2dx_lib_Cocos2dxActivity_nativeOnNewIntent",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetKeepScreenOn",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetEditTextDialogResult",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeConvertEncoding",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetPackageName",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetAudioPath",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeNotifyBgMusicState",
++            "Java_org_cocos2dx_lib_Cocos2dxHelper_nativeNotifyRecordingInfo",
++            "Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeOnSurfaceCreated",
++            "Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeOnDrawFrame",
++            "Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeSetMultitouchMode",
++            "Java_org_cocos2dx_lib_Cocos2dxRenderer_nativeWaitForVsync",
++            "Java_org_cocos2dx_lib_Cocos2dxGLSurfaceView_nativeOnWindowFocusChanged",
++            "Java_org_cocos2dx_lib_Cocos2dxActivity_nativeOnTouchEvent",
++            "Java_org_cocos2dx_lib_Cocos2dxGLSurfaceView_nativeOnMotionEvent",
++            "Java_org_cocos2dx_lib_Cocos2dxGLSurfaceView_nativeOnKeyEvent",
++            "Java_org_cocos2dx_lib_Cocos2dxActivity_ativeGetFrameSync",
++            "Java_com_fingersoft_hcr2_AppActivity_nativeOnCreate",
++            "Java_com_fingersoft_hcr2_AppActivity_onCreateNative"
++        };
++        for(const char *n : probeNames) {
++            void *p = symResolver(n);
++            if(p)
++                Log::info("JniSupport", "JNI surface: %s -> %p\n", n, p);
++            else
++                Log::trace("JniSupport", "JNI surface MISS: %s\n", n);
++        }
++    }
++
++    // nativeSetContext(context, assetManager) — required by the engine glue.
++    if(nativeSetContext) {
++        Log::trace("JniSupport", "Calling nativeSetContext\n");
++        nativeSetContext(jenv, thiz, thiz, thiz);
++    }
++
++    // nativeSetAudioDeviceInfo(hasLowLatency, sampleRate, bufferSizeInFrames) —
++    // the device calls this from Cocos2dxHelper.init before nativeInit.
++    auto nativeSetAudioDeviceInfo = (void(*)(JNIEnv*, jobject, jboolean, jint, jint))symResolver("Java_org_cocos2dx_lib_Cocos2dxHelper_nativeSetAudioDeviceInfo");
++    if(nativeSetAudioDeviceInfo) {
++        Log::trace("JniSupport", "Calling nativeSetAudioDeviceInfo(48000, 240)\n");
++        nativeSetAudioDeviceInfo(jenv, thiz, JNI_TRUE, 48000, 240);
++    } else {
++        Log::trace("JniSupport", "nativeSetAudioDeviceInfo unresolvable; skipping\n");
++    }
++
++    // nativeSetApkPath(apkPath) — the engine's zip-based FileUtils reads the
++    // APK at this path. On device it is the real .apk (sourceDir). Using a
++    // non-zip file (AndroidManifest.xml) makes every asset read fail and the
++    // loader spin. Prefer a real APK next to the game data, else the pulled one.
++    if(nativeSetApkPath) {
++        std::string apkFile = PathHelper::getGameDir() + "base.apk";
++        bool hasApk = (access(apkFile.c_str(), R_OK) == 0);
++        if(!hasApk) {
++            apkFile = "/tmp/hcr2/hcr2_device_base.apk";
++            hasApk = (access(apkFile.c_str(), R_OK) == 0);
++        }
++        if(!hasApk) {
++            apkFile = PathHelper::getGameDir() + "AndroidManifest.xml";
++        }
++        auto apkPath = std::make_shared<FakeJni::JString>(apkFile);
++        Log::trace("JniSupport", "Calling nativeSetApkPath(%s)\n", apkFile.c_str());
++        nativeSetApkPath(jenv, thiz, (jstring)apkPath.get());
++    }
++
++    // Ensure a real GL window + context exist before the engine renders.
++    // Normal Android gets its EGL context from the Java GLSurfaceView; here we
++    // create a dedicated GameWindow (SDL) on this same thread and bind an EGL
++    // context through FakeEGL so the engine's GLView can actually render/swap.
++    auto windowMgr = GameWindowManager::getManager();
++    if(!this->window) {
++        cocosWindow = windowMgr->createWindow(AppConfig::get().windowTitle.c_str(), w, h, options.graphicsApi);
++        this->window = (ANativeWindow *)(void *)cocosWindow.get();
++        cocosWindow->show();
++    }
++    GameWindow *gw = (GameWindow *)(void *)this->window;
++
++    // Hide the launcher's diagnostic window (used only for GL symbol setup) so
++    // only this dedicated game window is visible.
++    FakeLooper::hideDiagnosticWindow();
++
++    // Attach window callbacks + a fake input queue so touch/keyboard input can
++    // reach the game (normally wired by FakeLooper::prepare, which the cocos
++    // direct-drive path bypasses).
++    if(!cocosWindowCallbacks) {
++        cocosInputQueue = std::make_shared<FakeInputQueue>();
++        cocosWindowCallbacks = std::make_shared<WindowCallbacks>(*cocosWindow, *this, *cocosInputQueue);
++        cocosWindowCallbacks->registerCallbacks();
++    }
++
++    // Create + bind an EGL context onto the window (via the fake EGL path).
++    EGLDisplay dpy = fake_egl::eglGetDisplay(EGL_DEFAULT_DISPLAY);
++    EGLint major, minor;
++    fake_egl::eglInitialize(dpy, &major, &minor);
++    EGLConfig config;
++    EGLint numConfig;
++    EGLint cfgAttrs[] = {EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
++                         EGL_ALPHA_SIZE, 8, EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_NONE};
++    if(fake_egl::eglChooseConfig(dpy, cfgAttrs, &config, 1, &numConfig) && numConfig > 0) {
++        EGLSurface surf = fake_egl::eglCreateWindowSurface(dpy, config, (EGLNativeWindowType)gw, nullptr);
++        EGLContext ctx = fake_egl::eglCreateContext(dpy, config, EGL_NO_CONTEXT, nullptr);
++        Log::trace("JniSupport", "EGL init: display=%p surf=%p ctx=%p\n", (void*)dpy, (void*)surf, (void*)ctx);
++        fake_egl::eglMakeCurrent(dpy, surf, surf, ctx);
++    } else {
++        Log::warn("JniSupport", "eglChooseConfig produced no configs; continuing without EGL context\n");
++    }
++
++    // nativeInit(width, height) — creates the GL view, runs the AppDelegate/scene.
++    Log::info("JniSupport", "Calling nativeInit(%d, %d)\n", w, h);
++    nativeInit(jenv, thiz, w, h);
++
++    // nativeOnSurfaceChanged(width, height)
++    if(nativeOnSurfaceChanged) {
++        Log::trace("JniSupport", "Calling nativeOnSurfaceChanged(%d, %d)\n", w, h);
++        nativeOnSurfaceChanged(jenv, thiz, w, h);
++    }
++
++    // Render loop: call nativeRender() -> Director::mainLoop() each frame.
++    if(!nativeRender) {
++        Log::error("JniSupport", "nativeRender not found\n");
++        return;
++    }
++
++    Log::info("JniSupport", "Starting Cocos2d-x render loop\n");
++
++    // Install a SIGUSR2 stack-capture handler on the render thread: when the
++    // watchdog detects a stale frame it tgkills this tid; the handler dumps the
++    // live (in-memory) backtrace to reveal exactly where nativeRender is stuck.
++    static volatile pid_t renderTid = 0;
++    static struct sigaction sa;
++    static std::atomic<int> sigCount = 0;
++    static int stackFd = -1;
++    static const uintptr_t sEngineBase = (uintptr_t)(void*)nativeRender - 0x1a51370ull;
++    (void)renderTid;
++    stackFd = open("/tmp/hcr2/renderstack.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
++    sa.sa_flags = 0;
++    sigemptyset(&sa.sa_mask);
++    sa.sa_sigaction = [](int, siginfo_t*, void *uctxt) {
++        int myfd = open("/tmp/hcr2/renderstack.txt", O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0644);
++        if(myfd < 0) return;
++        (void)write(myfd, "handler ran\n", 12);
++        // Dump the interrupted thread's register context + manual stack-word walk
++        // so we can find the caller even without working unwinding (the engine
++        // builds omit frame pointers, which is why backtrace stops at 1 frame).
++        ucontext_t *uc = (ucontext_t *)uctxt;
++        uintptr_t rip = uc->uc_mcontext.gregs[REG_RIP];
++        uintptr_t rsp = uc->uc_mcontext.gregs[REG_RSP];
++        uintptr_t rbp = uc->uc_mcontext.gregs[REG_RBP];
++        uintptr_t gr_rax = uc->uc_mcontext.gregs[REG_RAX];
++        uintptr_t gr_rbx = uc->uc_mcontext.gregs[REG_RBX];
++        uintptr_t gr_rcx = uc->uc_mcontext.gregs[REG_RCX];
++        uintptr_t gr_rdx = uc->uc_mcontext.gregs[REG_RDX];
++        uintptr_t gr_rsi = uc->uc_mcontext.gregs[REG_RSI];
++        uintptr_t gr_rdi = uc->uc_mcontext.gregs[REG_RDI];
++        uintptr_t gr_r8 = uc->uc_mcontext.gregs[REG_R8];
++        uintptr_t gr_r9 = uc->uc_mcontext.gregs[REG_R9];
++        uintptr_t gr_r10 = uc->uc_mcontext.gregs[REG_R10];
++        uintptr_t gr_r11 = uc->uc_mcontext.gregs[REG_R11];
++        uintptr_t gr_r12 = uc->uc_mcontext.gregs[REG_R12];
++        uintptr_t gr_r13 = uc->uc_mcontext.gregs[REG_R13];
++        uintptr_t gr_r14 = uc->uc_mcontext.gregs[REG_R14];
++        uintptr_t gr_r15 = uc->uc_mcontext.gregs[REG_R15];
++        char rc[1024];
++        int rl = snprintf(rc, sizeof(rc),
++            "ctx rip=%p rsp=%p rbp=%p\n"
++            "  regs rax=%p rbx=%p rcx=%p rdx=%p rsi=%p rdi=%p\n"
++            "  regs r8=%p r9=%p r10=%p r11=%p r12=%p r13=%p r14=%p r15=%p\n",
++            (void*)rip, (void*)rsp, (void*)rbp,
++            (void*)gr_rax, (void*)gr_rbx, (void*)gr_rcx, (void*)gr_rdx, (void*)gr_rsi, (void*)gr_rdi,
++            (void*)gr_r8, (void*)gr_r9, (void*)gr_r10, (void*)gr_r11, (void*)gr_r12, (void*)gr_r13, (void*)gr_r14, (void*)gr_r15);
++        (void)write(myfd, rc, rl);
++        (void)gr_rax; (void)gr_rbx; (void)gr_rcx; (void)gr_rdx; (void)gr_rsi; (void)gr_rdi;
++        (void)gr_r8; (void)gr_r9; (void)gr_r10; (void)gr_r11; (void)gr_r12; (void)gr_r13; (void)gr_r14; (void)gr_r15;
++        uintptr_t nb = sEngineBase;
++        uintptr_t eb = nb;
++        if(rip >= eb && rip < eb + 0x202e550ull) {
++            char off[128];
++            int ol = snprintf(off, sizeof(off), "pc-offset=0x%llx module_base=0x%llx\n", (unsigned long long)(rip - eb), (unsigned long long)eb);
++            (void)write(myfd, off, ol);
++        }
++        if(rsp != 0) {
++            int pmfd = open("/proc/self/mem", O_RDONLY);
++            if(pmfd >= 0) {
++                // FP-chain unwind: engine prologues push rbp at [rbp], return
++                // addr at [rbp+8]; walk saved rbp links. Tolerate a broken link
++                // by scanning forward for the next plausible frame.
++                uintptr_t fp = rbp;
++                int maxFrames = 40;
++                for(int fi = 0; fi < maxFrames; ++fi) {
++                    uintptr_t ret = 0, nfp = 0;
++                    ssize_t g = pread(pmfd, &nfp, sizeof(nfp), (off_t)fp);
++                    if(g != (ssize_t)sizeof(nfp)) break;
++                    g = pread(pmfd, &ret, sizeof(ret), (off_t)(fp + 8));
++                    if(g != (ssize_t)sizeof(ret)) break;
++                    char fl[128];
++                    int flen = 0;
++                    int tag = 0;
++                    char elab[80] = "";
++                    if(ret >= eb && ret < eb + 0x202e550ull) {
++                        tag = 1;
++                        flen = snprintf(fl, sizeof(fl), "  FP[%d] fp=%p ret=%p -> offset=0x%llx%s\n", fi, (void*)fp, (void*)ret, (unsigned long long)(ret - eb), elab);
++                    } else if(ret != 0) {
++                        flen = snprintf(fl, sizeof(fl), "  FP[%d] fp=%p ret=%p\n", fi, (void*)fp, (void*)ret);
++                    }
++                    if(flen > 0) (void)write(myfd, fl, flen);
++                    if(tag == 0 && fi >= 2) break; // past our own frames and nothing useful
++                    // advance; guard: next fp must be higher and sane
++                    if(nfp <= fp || nfp - fp > 0x40000) break;
++                    fp = nfp;
++                }
++                for(int i = 0; i < 64; ++i) {
++                    uintptr_t word = 0;
++                    ssize_t gotv = pread(pmfd, &word, sizeof(word), (off_t)(rsp + (uintptr_t)i * 8));
++                    if(gotv != (ssize_t)sizeof(word)) break;
++                    if(word >= eb && word < eb + 0x202e550ull && (word & 7) == 0) {
++                        char wl[96];
++                        int wlen = snprintf(wl, sizeof(wl), "  stack[%d]=%p -> offset=0x%llx\n", i, (void*)word, (unsigned long long)(word - eb));
++                        (void)write(myfd, wl, wlen);
++                    }
++                }
++                close(pmfd);
++            }
++        }
++        int n = 32;
++        void *arr[32];
++        n = backtrace(arr, n);
++        char hdr[64];
++        int hl = snprintf(hdr, sizeof(hdr), "=== RENDER STACK sig=%d n=%d ===\n", sigCount.fetch_add(1), n);
++        (void)write(myfd, hdr, hl);
++        char **syms = backtrace_symbols(arr, n);
++        for(int i = 0; i < n; ++i) {
++            const char *s = (syms && syms[i]) ? syms[i] : "?";
++            std::string line = std::to_string(i) + ": " + s + "\n";
++            (void)write(myfd, line.c_str(), line.size());
++        }
++        if(syms) free(syms);
++        close(myfd);
++        stackFd = -1;
++    };
++    sa.sa_flags = SA_SIGINFO;
++    sigaction(SIGUSR2, &sa, nullptr);
++    renderTid = (pid_t)syscall(186);
++    static pthread_t renderThreadHandle = pthread_self();
++    // Self-test: raise SIGUSR2 on this thread now to verify the handler runs.
++    raise(SIGUSR2);
++    Log::info("JniSupport", "Render thread tid=%ld SIGUSR2 stack-capture armed + selftest\n", (long)renderTid);
++    // The engine's GLView::swapBuffers is a no-op (stripped build), so drawScene
++    // renders into our current GL context but never presents. We present the
++    // window ourselves after each frame via the fake EGL swap path.
++    EGLDisplay swapDpy = fake_egl::eglGetDisplay(EGL_DEFAULT_DISPLAY);
++    EGLSurface swapSurf = (EGLSurface)gw;
++    if(cocosWindowCallbacks)
++        cocosWindowCallbacks->startSendEvents();
++
++    // --- Watchdog: detect when nativeRender stops returning (stale frame) and
++    // dump a thread census (kernel wait channel + blocking syscall + CPU time
++    // per thread) to reveal what the engine is waiting on. Readable without
++    // ptrace, so it cannot hang or crash. ---
++    auto snapshotThreads = []() {
++        int pid = getpid();
++        DIR *dir = opendir(("/proc/" + std::to_string(pid) + "/task").c_str());
++        if(!dir) return;
++        struct dirent *e;
++        long long now = time(nullptr);
++        while((e = readdir(dir)) != nullptr) {
++            if(e->d_name[0] == '.') continue;
++            std::string tid = e->d_name;
++            auto base = "/proc/" + std::to_string(pid) + "/task/" + tid + "/";
++            std::string wchan, sysc, stat;
++            std::ifstream(base + "wchan") >> wchan;
++            std::ifstream(base + "syscall") >> sysc;
++            // Full args come next after the syscall number in /proc/pid/task/tid/syscall
++            std::ifstream sk(base + "syscall");
++            std::string sysargs;
++            if(sk.is_open()) {
++                std::string line; std::getline(sk, line);
++                sysargs = line;
++            }
++            std::ifstream st(base + "stat");
++            std::string cpu, ip;
++            if(st.is_open()) {
++                std::string line; std::getline(st, line);
++                // comm is wrapped in parens and may contain spaces; fields after
++                // comm start right after the LAST ')' pair.
++                auto cls = line.rfind(')');
++                if(cls != std::string::npos && cls + 2 < line.size()) {
++                    std::string rest = line.substr(cls + 1);
++                    std::istringstream iss(rest);
++                    char stateChar = 0; // field 3
++                    iss >> stateChar;   // skips whitespace, consumes the state char
++                    long long v;
++                    int idx = 4;
++                    while(iss >> v) {
++                        if(idx == 14 || idx == 15) cpu += std::to_string(v) + (idx==14?" ":"");
++                        if(idx == 30) ip = std::to_string(v);
++                        idx++;
++                    }
++                }
++            }
++            std::string sigblk, sigpnd, sigcgt;
++            std::ifstream sts(base + "status");
++            if(sts.is_open()) {
++                std::string l;
++                while(std::getline(sts, l)) {
++                    if(l.rfind("SigBlk:", 0) == 0) sigblk = l.substr(l.find(':') + 1);
++                    else if(l.rfind("SigPnd:", 0) == 0) sigpnd = l.substr(l.find(':') + 1);
++                    else if(l.rfind("SigCgt:", 0) == 0) sigcgt = l.substr(l.find(':') + 1);
++                }
++            }
++            Log::info("JniSupport", "Thread cens tid=%s wchan=%s syscall=[%s] cpu(ut+st)=%s ip=%s\n",
++                      tid.c_str(), wchan.c_str(), sysargs.c_str(), cpu.c_str(), ip.c_str());
++            Log::info("JniSupport", "Thread cens tid=%s SigBlk=%s SigPnd=%s SigCgt=%s\n",
++                      tid.c_str(), sigblk.c_str(), sigpnd.c_str(), sigcgt.c_str());
++        }
++        closedir(dir);
++        (void)now;
++    };
++
++    /// Dump the loaded (decoded) libcocos2dcpp.so code from this process's own
++    /// memory so we can disassemble the real engine code (the on-disk file is
++    /// packed/encrypted). We compute the module base from a resolved native
++    /// symbol and its known file offset, then read that whole segment.
++    auto dumpModule = [&]() {
++        uintptr_t engineBase = (uintptr_t)(void*)nativeRender - 0x1a51370ull;
++        size_t len = (size_t)0x202e550ull;
++        int fd = open("/proc/self/mem", O_RDONLY);
++        if(fd < 0) { Log::warn("JniSupport", "self-mem open failed: %s\n", strerror(errno)); return; }
++        char *buf = (char*)malloc(len);
++        ssize_t got = pread(fd, buf, len, (off_t)engineBase);
++        close(fd);
++        if(got <= 0) { free(buf); Log::warn("JniSupport", "self-mem pread @0x%llx failed: %s\n",
++                                            (unsigned long long)engineBase, strerror(errno)); return; }
++        FILE *f = fopen("/tmp/hcr2/libcocos.mem", "wb");
++        if(f) { fwrite(buf, 1, (size_t)got, f); fclose(f); }
++        free(buf);
++        Log::warn("JniSupport", "WATCHDOG: dumped engine code base=0x%llx size=%zd\n",
++                  (unsigned long long)engineBase, (size_t)got);
++
++        // Also dump the RW GOT region (import pointer table) so we can resolve
++        // which libc functions the scheduler's import thunks point at.
++        size_t gotLen = 0x200000;
++        int fd2 = open("/proc/self/mem", O_RDONLY);
++        if(fd2 >= 0) {
++            char *g = (char*)malloc(gotLen);
++            ssize_t g2 = pread(fd2, g, gotLen, (off_t)(engineBase + 0x21e0000));
++            close(fd2);
++            if(g2 > 0) {
++                // Resolve the scheduler's known import thunks via dladdr
++                const uintptr_t slots[][2] = {
++                    {0x201e6c0,0x21f0360},{0x201e6d0,0x21f0368},
++                    {0x201ebf0,0x21f05f8},{0x201eb90,0x21f05c8},
++                    {0x201e900,0x21f0480},{0x201e620,0x21f0310},
++                };
++                for(auto &sl : slots) {
++                    uintptr_t vaddr = sl[1];
++                    uintptr_t gslot = (vaddr - 0x21e0000);
++                    if(gslot + 8 > (size_t)g2) continue;
++                    uintptr_t ptr = *(uintptr_t*)(g + gslot);
++                    Dl_info info;
++                    if(dladdr((void*)ptr, &info) && info.dli_sname) {
++                        Log::warn("JniSupport", "WATCHDOG import thunk 0x%llx -> %s (%s)\n",
++                                  (unsigned long long)sl[0], info.dli_sname,
++                                  info.dli_fname ? info.dli_fname : "?");
++                    } else {
++                        Log::warn("JniSupport", "WATCHDOG import thunk 0x%llx -> ptr 0x%llx (unresolved)\n",
++                                  (unsigned long long)sl[0], (unsigned long long)ptr);
++                    }
++                }
++                FILE *fg = fopen("/tmp/hcr2/libcocos.got", "wb");
++                if(fg) { fwrite(g, 1, (size_t)g2, fg); fclose(fg); }
++                Log::warn("JniSupport", "WATCHDOG: dumped got region size=%zd\n", (size_t)g2);
++            }
++            free(g);
++        }
++    };
++
++    std::atomic<std::chrono::steady_clock::time_point> lastRenderOk = {};
++    std::atomic<bool> staleReported = false;
++    std::thread watchdog([&]() {
++        std::this_thread::sleep_for(std::chrono::seconds(3));
++        while(true) {
++            auto last = lastRenderOk.load();
++            auto age = std::chrono::duration_cast<std::chrono::seconds>(
++                std::chrono::steady_clock::now() - last).count();
++            if(age > 3 && !staleReported.exchange(true)) {
++                Log::warn("JniSupport", "WATCHDOG: nativeRender has not returned for %llds (stale frame)\n",
++                          (long long)age);
++                snapshotThreads();
++                dumpModule();
++                // Send SIGUSR2 to the render thread several times (2s apart) to
++                // capture a histogram of its interrupted PCs -> reveals the hot
++                // spin loop.
++                if(renderThreadHandle) {
++                    (void)write(open("/tmp/hcr2/watchdog_fired", O_WRONLY | O_CREAT | O_TRUNC, 0644),
++                                "fired\n", 6);
++                    for(int s = 0; s < 4; ++s) {
++                        int pr = pthread_kill(renderThreadHandle, SIGUSR2);
++                        Log::warn("JniSupport", "WATCHDOG: pthread_kill #%d returned %d\n", s, pr);
++                        std::this_thread::sleep_for(std::chrono::seconds(2));
++                    }
++                }
++            }
++            std::this_thread::sleep_for(std::chrono::seconds(1));
++        }
++    });
++    watchdog.detach();
++
++    int frameCount = 0;
++    auto loopStart = std::chrono::steady_clock::now();
++    while(true) {
++        auto t0 = std::chrono::steady_clock::now();
++        nativeRender(jenv, thiz);
++        auto t1 = std::chrono::steady_clock::now();
++        lastRenderOk.store(std::chrono::steady_clock::now());
++        fake_egl::eglSwapBuffers(swapDpy, swapSurf);
++        ++frameCount;
++        auto el = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
++        if(frameCount <= 12 || frameCount % 25 == 0) {
++            Log::trace("JniSupport", "Frame %d: nativeRender took %lld ms (total %lld ms)\n",
++                       frameCount, (long long)el,
++                       (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
++                           t1 - loopStart).count());
++        }
++        // Yield to other threads and avoid busy-spinning.
++        std::this_thread::sleep_for(std::chrono::milliseconds(1));
++    }
++}
++
+ static std::string urlDecode(const std::string& encoded) {
+     std::ostringstream decoded;
+     for(size_t i = 0; i < encoded.length(); ++i) {
+@@ -449,7 +963,7 @@ void JniSupport::onWindowCreated(ANativeWindow* window, AInputQueue* inputQueue)
+     // initialized; the thread initialization code runs ALooper_prepare before signaling it's ready.
+     this->window = window;
+     this->inputQueue = inputQueue;
+-    activity->window = (GameWindow*)window;
++    if(activity) activity->window = (GameWindow*)window;
+ }
+ 
+ void JniSupport::onWindowClosed() {
+diff --git a/src/jni/jni_support.h b/src/jni/jni_support.h
+index d223066..1b5f41d 100644
+--- a/src/jni/jni_support.h
++++ b/src/jni/jni_support.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include "main_activity.h"
++#include "cocos2dx_activity.h"
+ #include "store.h"
+ #include "../fake_assetmanager.h"
+ #include <baron/baron.h>
+@@ -11,6 +12,9 @@
+ #include <mutex>
+ #include "../text_input_handler.h"
+ 
++class FakeInputQueue;
++class WindowCallbacks;
++
+ struct JniSupport {
+ private:
+     struct NativeEntry {
+@@ -26,9 +30,13 @@ private:
+     ANativeActivity nativeActivity;
+     GameActivity gameActivity;
+     std::shared_ptr<MainActivity> activity;
++    std::shared_ptr<Hcr2Activity> cocosActivity;
+     jobject activityRef;
+     std::unique_ptr<FakeAssetManager> assetManager;
+     ANativeWindow *window;
++    std::shared_ptr<GameWindow> cocosWindow;
++    std::shared_ptr<FakeInputQueue> cocosInputQueue;
++    std::shared_ptr<WindowCallbacks> cocosWindowCallbacks;
+     AInputQueue *inputQueue;
+     std::condition_variable gameExitCond;
+     std::mutex gameExitMutex;
+@@ -45,6 +53,10 @@ public:
+ 
+     void registerMinecraftNatives(void *(*symResolver)(const char *));
+ 
++    // Bootstrap for Java-driven Cocos2d-x games (Hill Climb Racing 2 etc.).
++    // Loads the engine via JNI_OnLoad and drives the renderer natives.
++    void startCocos2dGame(void *(*symResolver)(const char *));
++
+     void startGame(ANativeActivity_createFunc *activityOnCreate, GameActivity_createFunc *gameCreate,
+                    void *stbiLoadFromMemory, void *stbiImageFree);
+ 
+diff --git a/src/main.cpp b/src/main.cpp
+index 35cd788..fb270db 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -7,6 +7,7 @@
+ #include <mcpelauncher/crash_handler.h>
+ #include <mcpelauncher/path_helper.h>
+ #include <mcpelauncher/mod_loader.h>
++#include "app_config.h"
+ #include "window_callbacks.h"
+ #include "fake_swappygl.h"
+ #include "splitscreen_patch.h"
+@@ -101,7 +102,7 @@ extern "C" __attribute__((weak)) const char * elg_lib = "";
+ #endif
+ 
+ static std::string getOptionsPath() {
+-    return PathHelper::getPrimaryDataDirectory() + "games/com.mojang/minecraftpe/options.txt";
++    return PathHelper::getPrimaryDataDirectory() + AppConfig::get().optionsPath;
+ }
+ 
+ static void parseOptions(properties::property_list& properties) {
+@@ -238,14 +239,19 @@ int main(int argc, char* argv[]) {
+         axml::AXMLParser manifestParser (manifestFile);
+         ApkInfo apkInfo = ApkInfo::fromXml(manifestParser);
+ 
+-        Log::info("Launcher", "Minecraft Package: %s", apkInfo.package.c_str());
+-        Log::info("Launcher", "Minecraft Version Code: %d", apkInfo.versionCode);
++        AppConfig::loadFromManifest(apkInfo);
++        AppConfig::loadFromFile(PathHelper::getGameDir() + "app_config.json");
+ 
+-        MinecraftVersion::init(apkInfo.package, apkInfo.versionCode);
++        Log::info("Launcher", "App Package: %s", apkInfo.package.c_str());
++        Log::info("Launcher", "App Version Code: %d", apkInfo.versionCode);
++
++        if(AppConfig::get().minecraftPatches)
++            MinecraftVersion::init(apkInfo.package, apkInfo.versionCode);
+     }
+     Log::info("Launcher", "Game version: %s", MinecraftVersion::getString().c_str());
+ 
+-    readOptions();
++if(AppConfig::get().minecraftPatches)
++        readOptions();
+ 
+ #ifdef __APPLE__
+     if(MinecraftVersion::isAtLeast(1, 26, 10, 0)) {
+@@ -374,7 +380,7 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
+     auto pid = getpid();
+     shim::rewrite_filesystem_access = {
+         // Minecraft 1.16.210 or older
+-        {"/data/data/com.mojang.minecraftpe", PathHelper::getPrimaryDataDirectory()},
++        {std::string("/data/data/") + AppConfig::get().package, PathHelper::getPrimaryDataDirectory()},
+         // Minecraft 1.16.210 or later, absolute path on linux (source build ubuntu 20.04)
+         {std::string("/data/data") + PathHelper::getParentDir(PathHelper::getAppDir()) + "/proc/" + std::to_string(pid) + "/cmdline", PathHelper::getPrimaryDataDirectory()}};
+     if(argc >= 1 && argv != nullptr && argv[0] != nullptr && argv[0][0] != '\0') {
+@@ -462,6 +468,7 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
+         gladLoadGLES2Loader(fake_egl::eglGetProcAddress);
+ #endif
+         MinecraftUtils::setupGLES2Symbols(fake_egl::eglGetProcAddress);
++        MinecraftUtils::setupGLES1Symbols(fake_egl::eglGetProcAddress);
+     } else {
+         // The glcore patch requires an empty library
+         // Otherwise linker has to hide the symbols from dlsym in libminecraftpe.so
+@@ -503,8 +510,18 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
+     std::vector<mcpelauncher_hook_t> mcpeHooks;
+     FakeSwappyGL::initHooks(mcpeHooks);
+ 
++    for(auto&& preload : AppConfig::get().preloadLibraries) {
++        auto p = PathHelper::findGameFile("lib/" + std::string(MinecraftUtils::getLibraryAbi()) + "/" + preload);
++        Log::trace("Launcher", "Preloading %s", p.c_str());
++        if(!linker::dlopen(p.c_str(), 0)) {
++            Log::error("Launcher", "Failed to preload %s: %s", p.c_str(), linker::dlerror());
++        }
++    }
++
++    static void* handle = nullptr;
++    if(AppConfig::get().jniMode != JniMode::Cocos2dx) {
+     Log::trace("Launcher", "Loading Minecraft library");
+-    static void* handle = MinecraftUtils::loadMinecraftLib(reinterpret_cast<void*>(&CorePatches::showMousePointer), reinterpret_cast<void*>(&CorePatches::hideMousePointer), reinterpret_cast<void*>(&CorePatches::setFullscreen), reinterpret_cast<void*>(&FakeLooper::onGameActivityClose), mcpeHooks);
++    handle = MinecraftUtils::loadMinecraftLib(reinterpret_cast<void*>(&CorePatches::showMousePointer), reinterpret_cast<void*>(&CorePatches::hideMousePointer), reinterpret_cast<void*>(&CorePatches::setFullscreen), reinterpret_cast<void*>(&FakeLooper::onGameActivityClose), mcpeHooks);
+     if(!handle && options.graphicsApi == GraphicsApi::OPENGL) {
+         // Old game version or renderdragon
+         options.graphicsApi = GraphicsApi::OPENGL_ES2;
+@@ -535,11 +552,18 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
+         // Try load the game again
+         handle = MinecraftUtils::loadMinecraftLib(reinterpret_cast<void*>(&CorePatches::showMousePointer), reinterpret_cast<void*>(&CorePatches::hideMousePointer), reinterpret_cast<void*>(&CorePatches::setFullscreen), reinterpret_cast<void*>(&FakeLooper::onGameActivityClose), mcpeHooks);
+     }
++    } else {
++        Log::trace("Launcher", "Loading game library %s", AppConfig::get().nativeLibrary.c_str());
++        handle = linker::dlopen(PathHelper::findGameFile("lib/" + std::string(MinecraftUtils::getLibraryAbi()) + "/" + AppConfig::get().nativeLibrary).c_str(), 0);
++        if(!handle) {
++            Log::error("Launcher", "Failed to dlopen game library: %s", linker::dlerror());
++        }
++    }
+     if(!handle) {
+-        Log::error("Launcher", "Failed to load Minecraft library, please reinstall or wait for an update to support the new release");
++        Log::error("Launcher", "Failed to load the game library, please reinstall or wait for an update to support the new release");
+         return 51;
+     }
+-    Log::info("Launcher", "Loaded Minecraft library");
++    Log::info("Launcher", "Loaded game library");
+     Log::debug("Launcher", "Minecraft is at offset 0x%" PRIXPTR, (uintptr_t)MinecraftUtils::getLibraryBase(handle));
+     base = MinecraftUtils::getLibraryBase(handle);
+ 
+@@ -571,6 +595,7 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
+             SetLogToStderr(true);
+         }
+     }
++    if(AppConfig::get().minecraftPatches) {
+     bool (*isAndroidTrial)() = (decltype(isAndroidTrial))linker::dlsym(handle, "Java_com_mojang_minecraftpe_MainActivity_isAndroidTrial");
+     bool (*isAndroidChromebook)() = (decltype(isAndroidChromebook))linker::dlsym(handle, "Java_com_mojang_minecraftpe_MainActivity_isAndroidChromebook");
+     bool (*isAndroidAmazon)() = (decltype(isAndroidAmazon))linker::dlsym(handle, "Java_com_mojang_minecraftpe_MainActivity_isAndroidAmazon");
+@@ -614,18 +639,27 @@ Hardware	: Qualcomm Technologies, Inc MSM8998
+             options.graphicsApi = GraphicsApi::OPENGL_ES2;
+         }
+     }
++    }
+ 
+     Log::info("Launcher", "Initializing JNI");
+ 
+     FakeLooper::setJniSupport(&support);
+-    support.registerMinecraftNatives(+[](const char* sym) {
+-        return linker::dlsym(handle, sym);
+-    });
+-    std::thread startThread([&support]() {
++    if(AppConfig::get().minecraftPatches) {
++        support.registerMinecraftNatives(+[](const char* sym) {
++            return linker::dlsym(handle, sym);
++        });
++    }
++    std::thread startThread([&support, handle]() {
+         ThreadMover::storeStartThreadId();
+-        support.startGame((ANativeActivity_createFunc*)linker::dlsym(handle, "ANativeActivity_onCreate"), (GameActivity_createFunc*)linker::dlsym(handle, "GameActivity_onCreate"),
+-                          linker::dlsym(handle, "stbi_load_from_memory"),
+-                          linker::dlsym(handle, "stbi_image_free"));
++        if(AppConfig::get().jniMode == JniMode::Cocos2dx) {
++            support.startCocos2dGame(+[](const char* sym) {
++                return linker::dlsym(handle, sym);
++            });
++        } else {
++            support.startGame((ANativeActivity_createFunc*)linker::dlsym(handle, "ANativeActivity_onCreate"), (GameActivity_createFunc*)linker::dlsym(handle, "GameActivity_onCreate"),
++                              linker::dlsym(handle, "stbi_load_from_memory"),
++                              linker::dlsym(handle, "stbi_image_free"));
++        }
+         linker::dlclose(handle);
+     });
+     startThread.detach();

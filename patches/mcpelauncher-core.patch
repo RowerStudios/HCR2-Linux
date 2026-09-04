@@ -1,0 +1,536 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 28c63dd..e6c9bbb 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -6,7 +6,7 @@ if (NOT APPLE)
+     find_package(PNG)
+ endif()
+ 
+-add_library(mcpelauncher-core include/mcpelauncher/hook.h include/mcpelauncher/mod_loader.h include/mcpelauncher/hybris_utils.h include/mcpelauncher/patch_utils.h include/mcpelauncher/crash_handler.h include/mcpelauncher/minecraft_utils.h src/hook.cpp src/mod_loader.cpp src/hybris_utils.cpp src/hybris_android_log_hook.cpp src/crash_handler.cpp src/patch_utils.cpp src/minecraft_utils.cpp include/mcpelauncher/minecraft_version.h src/minecraft_version.cpp include/mcpelauncher/fmod_utils.h src/fmod_utils.cpp)
++add_library(mcpelauncher-core include/mcpelauncher/hook.h include/mcpelauncher/mod_loader.h include/mcpelauncher/hybris_utils.h include/mcpelauncher/patch_utils.h include/mcpelauncher/crash_handler.h include/mcpelauncher/minecraft_utils.h src/hook.cpp src/mod_loader.cpp src/hybris_utils.cpp src/hybris_android_log_hook.cpp src/crash_handler.cpp src/patch_utils.cpp src/minecraft_utils.cpp include/mcpelauncher/minecraft_version.h src/minecraft_version.cpp include/mcpelauncher/fmod_utils.h src/fmod_utils.cpp include/mcpelauncher/fake_opensl.h src/fake_opensl.cpp)
+ target_include_directories(mcpelauncher-core PUBLIC include/)
+ target_link_libraries(mcpelauncher-core PUBLIC mcpelauncher-common logger linker libc-shim minecraft-imported-symbols file-util jnivm ${CMAKE_DL_LIBS})
+ # Not working
+diff --git a/include/mcpelauncher/fake_opensl.h b/include/mcpelauncher/fake_opensl.h
+new file mode 100644
+index 0000000..36184d7
+--- /dev/null
++++ b/include/mcpelauncher/fake_opensl.h
+@@ -0,0 +1,13 @@
++#pragma once
++
++#include <string>
++#include <unordered_map>
++
++namespace OpenSL {
++
++// Symbol exports for the fake libOpenSLES.so. Only the subset of OpenSL ES
++// used by Cocos2d-x audio players is implemented; audio is accepted and
++// dropped (no audible output), but initialization succeeds so the game runs.
++std::unordered_map<std::string, void *> getSymbols();
++
++} // namespace OpenSL
+\ No newline at end of file
+diff --git a/include/mcpelauncher/minecraft_utils.h b/include/mcpelauncher/minecraft_utils.h
+index 726fb21..cd11292 100644
+--- a/include/mcpelauncher/minecraft_utils.h
++++ b/include/mcpelauncher/minecraft_utils.h
+@@ -36,4 +36,5 @@ public:
+     static size_t getLibraryBase(void* handle);
+ 
+     static void setupGLES2Symbols(void* (*resolver)(const char*));
++    static void setupGLES1Symbols(void* (*resolver)(const char*));
+ };
+diff --git a/src/fake_opensl.cpp b/src/fake_opensl.cpp
+new file mode 100644
+index 0000000..a572e2a
+--- /dev/null
++++ b/src/fake_opensl.cpp
+@@ -0,0 +1,432 @@
++#include <mcpelauncher/fake_opensl.h>
++#include <cstdint>
++#include <cstring>
++#include <cstddef>
++
++// Exported OpenSL ES interface IDs: the game imports these by symbol name, so
++// each resolves to the address of the matching array below.
++extern "C" const unsigned char SL_IID_ENGINE[16];
++extern "C" const unsigned char SL_IID_PLAY[16];
++extern "C" const unsigned char SL_IID_VOLUME[16];
++extern "C" const unsigned char SL_IID_SEEK[16];
++extern "C" const unsigned char SL_IID_PREFETCHSTATUS[16];
++extern "C" const unsigned char SL_IID_METADATAEXTRACTION[16];
++extern "C" const unsigned char SL_IID_ANDROIDSIMPLEBUFFERQUEUE[16];
++
++// Minimal OpenSL ES subset required by Cocos2d-x's Android audio player.
++//
++// Classic OpenSL ES ABI: every interface is a struct of inline function
++// pointers. A handle is a pointer to a pointer to that struct, and a method is
++// invoked as (*handle)->Method(handle, args...). All objects of a kind share
++// one vtable "table struct" instance; GetInterface returns pointers to the
++// per-object interface structs embedded in the object implementation block.
++
++namespace {
++
++typedef int32_t SLresult;
++typedef uint32_t SLuint32;
++typedef int32_t SLint32;
++typedef uint8_t SLboolean;
++typedef int32_t SLmillibel;
++typedef uint16_t SLpermille;
++typedef int64_t SLmillisecond;
++
++constexpr SLresult SL_RESULT_SUCCESS = 0;
++constexpr SLresult SL_RESULT_PARAMETER_INVALID = 1;
++constexpr SLresult SL_RESULT_PRECONDITIONS_VIOLATED = 5;
++
++constexpr SLboolean SL_BOOLEAN_FALSE = 0;
++constexpr SLboolean SL_BOOLEAN_TRUE = 1;
++
++constexpr SLuint32 SL_PLAYSTATE_STOPPED = 0;
++constexpr SLuint32 SL_PLAYSTATE_PLAYING = 1;
++constexpr SLuint32 SL_OBJECT_STATE_REALIZED = 1;
++constexpr SLuint32 SL_PREFETCHSTATUS_SUCCEEDED = 2;
++constexpr SLmillisecond SL_TIME_UNKNOWN = 0xFFFFFFFF;
++
++// ---- Interface structs (inline function pointer tables) ----
++
++struct SLObjectItf_;
++typedef const struct SLObjectItf_ *const *SLObjectItf;
++struct SLEngineItf_;
++typedef const struct SLEngineItf_ *const *SLEngineItf;
++struct SLPlayItf_;
++typedef const struct SLPlayItf_ *const *SLPlayItf;
++struct SLVolumeItf_;
++typedef const struct SLVolumeItf_ *const *SLVolumeItf;
++struct SLSeekItf_;
++typedef const struct SLSeekItf_ *const *SLSeekItf;
++struct SLPrefetchStatusItf_;
++typedef const struct SLPrefetchStatusItf_ *const *SLPrefetchStatusItf;
++struct SLMetadataExtractionItf_;
++typedef const struct SLMetadataExtractionItf_ *const *SLMetadataExtractionItf;
++struct SLAndroidSimpleBufferQueueItf_;
++typedef const struct SLAndroidSimpleBufferQueueItf_ *const *SLAndroidSimpleBufferQueueItf;
++typedef void( *SLAndroidSimpleBufferQueueCallback)(SLAndroidSimpleBufferQueueItf queue, void *pContext);
++
++struct SLAndroidSimpleBufferQueueState { SLuint32 count; SLuint32 index; };
++struct SLDataSourcePlaceholder { void *pLocator; void *pFormat; };
++struct SLDataSinkPlaceholder { void *pLocator; void *pFormat; };
++
++// Function prototypes for the SLObjectItf methods.
++SLresult obj_Realize(SLObjectItf self, SLboolean async);
++SLresult obj_Resume(SLObjectItf self, SLboolean async);
++SLresult obj_GetState(SLObjectItf self, SLuint32 *pState);
++SLresult obj_GetInterface(SLObjectItf self, const char *iid, void *pInterface);
++SLresult obj_RegisterCallback(SLObjectItf self, void *callback, void *pContext);
++SLresult obj_AbortAsyncOperation(SLObjectItf self);
++void obj_Destroy(SLObjectItf self);
++
++// Engine interface functions.
++SLresult eng_CreateAudioPlayer(SLEngineItf self, SLObjectItf *pPlayer, const SLDataSourcePlaceholder *src,
++                               const SLDataSinkPlaceholder *sink, SLuint32 numInterfaces, const char **ids, const SLboolean *req);
++SLresult eng_CreateOutputMix(SLEngineItf self, SLObjectItf *pMix, SLuint32 numInterfaces, const char **ids, const SLboolean *req);
++
++using Fn = void (*)();
++static Fn wedged() { return nullptr; }
++
++struct SLObjectItf_ {
++    SLresult (*Realize)(SLObjectItf, SLboolean);
++    SLresult (*Resume)(SLObjectItf, SLboolean);
++    SLresult (*GetState)(SLObjectItf, SLuint32 *);
++    SLresult (*GetInterface)(SLObjectItf, const char *, void *);
++    SLresult (*RegisterCallback)(SLObjectItf, void *, void *);
++    SLresult (*AbortAsyncOperation)(SLObjectItf);
++    void (*Destroy)(SLObjectItf);
++};
++struct SLEngineItf_ {
++    Fn CreateLEDDevice;   // ()slresult impl details unused
++    Fn CreateVibraDevice;
++    SLresult (*CreateAudioPlayer)(SLEngineItf, SLObjectItf *, const SLDataSourcePlaceholder *, const SLDataSinkPlaceholder *, SLuint32, const char **, const SLboolean *);
++    Fn CreateAudioRecorder;
++    Fn CreateMidiPlayer;
++    Fn CreateListener;
++    Fn Create3DGroup;
++    SLresult (*CreateOutputMix)(SLEngineItf, SLObjectItf *, SLuint32, const char **, const SLboolean *);
++    Fn CreateMetadataExtractor;
++    Fn CreateExtensionObject;
++    Fn QueryNumSupportedInterfaces;
++    Fn QuerySupportedInterfaces;
++};
++struct SLPlayItf_ {
++    SLresult (*SetPlayState)(SLPlayItf, SLuint32);
++    SLresult (*GetPlayState)(SLPlayItf, SLuint32 *);
++    SLresult (*GetDuration)(SLPlayItf, SLmillisecond *);
++    SLresult (*GetPosition)(SLPlayItf, SLmillisecond *);
++    SLresult (*RegisterCallback)(SLPlayItf, void *, void *);
++    SLresult (*SetCallbackEventsMask)(SLPlayItf, SLuint32);
++    SLresult (*GetCallbackEventsMask)(SLPlayItf, SLuint32 *);
++    SLresult (*SetMarkerPosition)(SLPlayItf, SLmillisecond);
++    SLresult (*ClearMarkerPosition)(SLPlayItf);
++    SLresult (*GetMarkerPosition)(SLPlayItf, SLmillisecond *);
++    SLresult (*SetPositionUpdatePeriod)(SLPlayItf, SLmillisecond);
++    SLresult (*GetPositionUpdatePeriod)(SLPlayItf, SLmillisecond *);
++};
++struct SLVolumeItf_ {
++    SLresult (*SetVolumeLevel)(SLVolumeItf, SLmillibel);
++    SLresult (*GetVolumeLevel)(SLVolumeItf, SLmillibel *);
++    SLresult (*GetMaxVolumeLevel)(SLVolumeItf, SLmillibel *);
++    SLresult (*SetMute)(SLVolumeItf, SLboolean);
++    SLresult (*GetMute)(SLVolumeItf, SLboolean *);
++    SLresult (*EnableStereoPosition)(SLVolumeItf, SLboolean);
++    SLresult (*GetStereoPosition)(SLVolumeItf, SLpermille *);
++    SLresult (*EnableStereoVolume)(SLVolumeItf, SLboolean);
++    SLresult (*GetStereoVolume)(SLVolumeItf, SLboolean *);
++    SLresult (*EnableMute)(SLVolumeItf, SLboolean);
++    SLresult (*GetEnableMute)(SLVolumeItf, SLboolean *);
++    SLresult (*EnableOnlyPosition)(SLVolumeItf, SLboolean);
++    SLresult (*GetEnableOnlyPosition)(SLVolumeItf, SLboolean *);
++    SLresult (*SetEnableStereoPosition)(SLVolumeItf, SLboolean);
++    SLresult (*GetEnableStereoPosition)(SLVolumeItf, SLboolean *);
++};
++struct SLSeekItf_ {
++    SLresult (*SetPosition)(SLSeekItf, SLmillisecond);
++    SLresult (*SetLoop)(SLSeekItf, SLboolean, SLmillisecond, SLmillisecond);
++    SLresult (*GetLoop)(SLSeekItf, SLboolean *, SLmillisecond *, SLmillisecond *);
++};
++struct SLPrefetchStatusItf_ {
++    SLresult (*GetPrefetchStatus)(SLPrefetchStatusItf, SLuint32 *);
++    SLresult (*GetFillLevel)(SLPrefetchStatusItf, SLpermille *);
++    SLresult (*RegisterCallback)(SLPrefetchStatusItf, void *, void *);
++};
++struct SLMetadataExtractionItf_ {
++    SLresult (*GetItemCount)(SLMetadataExtractionItf, SLuint32 *);
++    SLresult (*GetKeySize)(SLMetadataExtractionItf, SLuint32, SLuint32 *);
++    SLresult (*GetKey)(SLMetadataExtractionItf, SLuint32, SLuint32, char *);
++    SLresult (*GetValueSize)(SLMetadataExtractionItf, SLuint32, SLuint32 *);
++    SLresult (*GetValue)(SLMetadataExtractionItf, SLuint32, SLuint32, char *);
++    SLresult (*AddKeyFilter)(SLMetadataExtractionItf, SLuint32, SLuint32, const char *);
++    SLresult (*ClearKeyFilter)(SLMetadataExtractionItf);
++};
++struct SLAndroidSimpleBufferQueueItf_ {
++    SLresult (*Enqueue)(SLAndroidSimpleBufferQueueItf, void *, SLuint32);
++    SLresult (*Clear)(SLAndroidSimpleBufferQueueItf);
++    SLresult (*GetState)(SLAndroidSimpleBufferQueueItf, SLAndroidSimpleBufferQueueState *);
++    SLresult (*RegisterCallback)(SLAndroidSimpleBufferQueueItf, SLAndroidSimpleBufferQueueCallback, void *);
++    SLresult (*QueryNumBuffersInUse)(SLAndroidSimpleBufferQueueItf, SLuint32 *);
++    SLresult (*GetBuffer)(SLAndroidSimpleBufferQueueItf, SLuint32, const void **);
++};
++
++// ---- Object implementation block ----
++
++struct ObjectImpl {
++    SLuint32 kind; // 0 = engine, 1 = output mix, 2 = audio player
++    bool realized = false;
++    SLuint32 playState = SL_PLAYSTATE_STOPPED;
++    SLuint32 prefetchStatus = SL_PREFETCHSTATUS_SUCCEEDED;
++    SLAndroidSimpleBufferQueueCallback queueCallback = nullptr;
++    void *queueContext = nullptr;
++
++    SLObjectItf_ objItf{};
++    SLEngineItf_ engineItf{};
++    SLPlayItf_ playItf{};
++    SLVolumeItf_ volumeItf{};
++    SLSeekItf_ seekItf{};
++    SLPrefetchStatusItf_ prefetchItf{};
++    SLMetadataExtractionItf_ metaItf{};
++    SLAndroidSimpleBufferQueueItf_ queueItf{};
++};
++
++ObjectImpl *objFor(SLObjectItf self) {
++    if(!self || !*self) return nullptr;
++    // self == &objItf (we always store the address of the SLObjectItf_ member).
++    return (ObjectImpl *)((char *)(*self) - offsetof(ObjectImpl, objItf));
++}
++ObjectImpl *objForItf(const void *itfMember) {
++    return (ObjectImpl *)((char *)itfMember - offsetof(ObjectImpl, objItf));
++}
++
++// ---- SLObjectItf methods ----
++
++SLresult obj_Realize(SLObjectItf self, SLboolean async) {
++    ObjectImpl *o = objFor(self);
++    if(!o) return SL_RESULT_PARAMETER_INVALID;
++    o->realized = true;
++    (void)async;
++    return SL_RESULT_SUCCESS;
++}
++SLresult obj_Resume(SLObjectItf self, SLboolean async) { (void)self; (void)async; return SL_RESULT_SUCCESS; }
++SLresult obj_GetState(SLObjectItf self, SLuint32 *pState) {
++    ObjectImpl *o = objFor(self);
++    if(!o || !pState) return SL_RESULT_PARAMETER_INVALID;
++    *pState = o->realized ? SL_OBJECT_STATE_REALIZED : 0;
++    return SL_RESULT_SUCCESS;
++}
++SLresult obj_GetInterface(SLObjectItf self, const char *iid, void *pInterface);
++SLresult obj_RegisterCallback(SLObjectItf self, void *cb, void *ctx) { (void)self; (void)cb; (void)ctx; return SL_RESULT_SUCCESS; }
++SLresult obj_AbortAsyncOperation(SLObjectItf self) { (void)self; return SL_RESULT_SUCCESS; }
++void obj_Destroy(SLObjectItf self) {
++    ObjectImpl *o = objFor(self);
++    delete o;
++}
++
++// ---- SLEngineItf methods ----
++
++SLresult eng_CreateOutputMix(SLEngineItf self, SLObjectItf *pMix, SLuint32 n, const char **ids, const SLboolean *req) {
++    (void)self; (void)n; (void)ids; (void)req;
++    auto *o = new ObjectImpl();
++    o->kind = 1;
++    o->objItf.Realize = obj_Realize;
++    o->objItf.Resume = obj_Resume;
++    o->objItf.GetState = obj_GetState;
++    o->objItf.GetInterface = obj_GetInterface;
++    o->objItf.RegisterCallback = obj_RegisterCallback;
++    o->objItf.AbortAsyncOperation = obj_AbortAsyncOperation;
++    o->objItf.Destroy = obj_Destroy;
++    *pMix = (SLObjectItf)&o->objItf;
++    return SL_RESULT_SUCCESS;
++}
++
++SLresult eng_CreateAudioPlayer(SLEngineItf self, SLObjectItf *pPlayer, const SLDataSourcePlaceholder *src,
++                               const SLDataSinkPlaceholder *sink, SLuint32 n, const char **ids, const SLboolean *req) {
++    (void)self; (void)src; (void)sink; (void)n; (void)ids; (void)req;
++    auto *o = new ObjectImpl();
++    o->kind = 2;
++    o->objItf.Realize = obj_Realize;
++    o->objItf.Resume = obj_Resume;
++    o->objItf.GetState = obj_GetState;
++    o->objItf.GetInterface = obj_GetInterface;
++    o->objItf.RegisterCallback = obj_RegisterCallback;
++    o->objItf.AbortAsyncOperation = obj_AbortAsyncOperation;
++    o->objItf.Destroy = obj_Destroy;
++    *pPlayer = (SLObjectItf)&o->objItf;
++    return SL_RESULT_SUCCESS;
++}
++
++// ---- SLPlayItf methods ----
++
++SLresult play_SetPlayState(SLPlayItf self, SLuint32 state) {
++    ObjectImpl *o = objForItf(self);
++    if(!o) return SL_RESULT_PARAMETER_INVALID;
++    o->playState = state;
++    return SL_RESULT_SUCCESS;
++}
++SLresult play_GetPlayState(SLPlayItf self, SLuint32 *state) {
++    ObjectImpl *o = objForItf(self);
++    if(!o || !state) return SL_RESULT_PARAMETER_INVALID;
++    *state = o->playState;
++    return SL_RESULT_SUCCESS;
++}
++SLresult play_GetDuration(SLPlayItf self, SLmillisecond *d) { (void)self; if(d) *d = SL_TIME_UNKNOWN; return SL_RESULT_SUCCESS; }
++SLresult play_GetPosition(SLPlayItf self, SLmillisecond *p) { (void)self; if(p) *p = 0; return SL_RESULT_SUCCESS; }
++SLresult play_RegisterCallback(SLPlayItf self, void *cb, void *ctx) { (void)self; (void)cb; (void)ctx; return SL_RESULT_SUCCESS; }
++SLresult play_SetCbMask(SLPlayItf self, SLuint32 m) { (void)self; (void)m; return SL_RESULT_SUCCESS; }
++SLresult play_GetCbMask(SLPlayItf self, SLuint32 *m) { (void)self; if(m) *m = 0; return SL_RESULT_SUCCESS; }
++SLresult play_SetMarker(SLPlayItf self, SLmillisecond ms) { (void)self; (void)ms; return SL_RESULT_SUCCESS; }
++SLresult play_ClearMarker(SLPlayItf self) { (void)self; return SL_RESULT_SUCCESS; }
++SLresult play_GetMarker(SLPlayItf self, SLmillisecond *ms) { (void)self; if(ms) *ms = 0; return SL_RESULT_SUCCESS; }
++SLresult play_SetPeriod(SLPlayItf self, SLmillisecond ms) { (void)self; (void)ms; return SL_RESULT_SUCCESS; }
++SLresult play_GetPeriod(SLPlayItf self, SLmillisecond *ms) { (void)self; if(ms) *ms = 0; return SL_RESULT_SUCCESS; }
++
++// ---- SLVolumeItf methods ----
++
++SLresult vol_SetVolumeLevel(SLVolumeItf self, SLmillibel level) { (void)self; (void)level; return SL_RESULT_SUCCESS; }
++SLresult vol_GetVolumeLevel(SLVolumeItf self, SLmillibel *v) { (void)self; if(v) *v = 0; return SL_RESULT_SUCCESS; }
++SLresult vol_GetMaxVolumeLevel(SLVolumeItf self, SLmillibel *v) { (void)self; if(v) *v = 0; return SL_RESULT_SUCCESS; }
++SLresult vol_SetMute(SLVolumeItf self, SLboolean m) { (void)self; (void)m; return SL_RESULT_SUCCESS; }
++SLresult vol_GetMute(SLVolumeItf self, SLboolean *v) { (void)self; if(v) *v = SL_BOOLEAN_FALSE; return SL_RESULT_SUCCESS; }
++SLresult vol_ZeroBool(SLVolumeItf self, SLboolean m) { (void)self; (void)m; return SL_RESULT_SUCCESS; }
++SLresult vol_GetBool(SLVolumeItf self, SLboolean *v) { (void)self; if(v) *v = SL_BOOLEAN_FALSE; return SL_RESULT_SUCCESS; }
++SLresult vol_EnableStereoPosition(SLVolumeItf self, SLboolean e) { (void)self; (void)e; return SL_RESULT_SUCCESS; }
++SLresult vol_GetStereoPosition(SLVolumeItf self, SLpermille *v) { (void)self; if(v) *v = 0; return SL_RESULT_SUCCESS; }
++
++// ---- SLSeekItf methods ----
++
++SLresult seek_SetPosition(SLSeekItf self, SLmillisecond ms) { (void)self; (void)ms; return SL_RESULT_SUCCESS; }
++SLresult seek_SetLoop(SLSeekItf self, SLboolean loop, SLmillisecond start, SLmillisecond end) {
++    (void)self; (void)loop; (void)start; (void)end; return SL_RESULT_SUCCESS;
++}
++SLresult seek_GetLoop(SLSeekItf self, SLboolean *loop, SLmillisecond *start, SLmillisecond *end) {
++    (void)self; if(loop) *loop = SL_BOOLEAN_FALSE; if(start) *start = 0; if(end) *end = 0; return SL_RESULT_SUCCESS;
++}
++
++// ---- SLPrefetchStatusItf methods ----
++
++SLresult pref_GetPrefetchStatus(SLPrefetchStatusItf self, SLuint32 *status) {
++    ObjectImpl *o = objForItf(self);
++    if(!o || !status) return SL_RESULT_PARAMETER_INVALID;
++    *status = o->prefetchStatus;
++    return SL_RESULT_SUCCESS;
++}
++SLresult pref_GetFillLevel(SLPrefetchStatusItf self, SLpermille *v) { (void)self; if(v) *v = 1000; return SL_RESULT_SUCCESS; }
++SLresult pref_RegisterCallback(SLPrefetchStatusItf self, void *cb, void *ctx) { (void)self; (void)cb; (void)ctx; return SL_RESULT_SUCCESS; }
++
++// ---- SLMetadataExtractionItf methods ----
++
++SLresult meta_GetItemCount(SLMetadataExtractionItf self, SLuint32 *count) { (void)self; if(count) *count = 0; return SL_RESULT_SUCCESS; }
++SLresult meta_Size(SLMetadataExtractionItf self, SLuint32 idx, SLuint32 *size) { (void)self; (void)idx; if(size) *size = 0; return SL_RESULT_SUCCESS; }
++
++// ---- SLAndroidSimpleBufferQueueItf methods ----
++
++SLresult queue_Enqueue(SLAndroidSimpleBufferQueueItf self, void *buf, SLuint32 size) { (void)self; (void)buf; (void)size; return SL_RESULT_SUCCESS; }
++SLresult queue_Clear(SLAndroidSimpleBufferQueueItf self) { (void)self; return SL_RESULT_SUCCESS; }
++SLresult queue_GetState(SLAndroidSimpleBufferQueueItf self, SLAndroidSimpleBufferQueueState *state) { (void)self; if(state) { state->count = 0; state->index = 0; } return SL_RESULT_SUCCESS; }
++SLresult queue_RegisterCallback(SLAndroidSimpleBufferQueueItf self, SLAndroidSimpleBufferQueueCallback cb, void *ctx) {
++    ObjectImpl *o = objForItf(self);
++    if(!o) return SL_RESULT_PARAMETER_INVALID;
++    o->queueCallback = cb;
++    o->queueContext = ctx;
++    return SL_RESULT_SUCCESS;
++}
++SLresult queue_QueryNumBuffersInUse(SLAndroidSimpleBufferQueueItf self, SLuint32 *n) { (void)self; if(n) *n = 1; return SL_RESULT_SUCCESS; }
++SLresult queue_GetBuffer(SLAndroidSimpleBufferQueueItf self, SLuint32 idx, const void **buf) { (void)self; (void)idx; if(buf) *buf = nullptr; return SL_RESULT_SUCCESS; }
++
++// ---- obj_GetInterface ----
++
++static bool idsEqual(const char *a, const unsigned char *b) {
++    return a == (const char *)b || (a && b && memcmp(a, b, 16) == 0);
++}
++
++SLresult obj_GetInterface(SLObjectItf self, const char *iid, void *pInterface) {
++    ObjectImpl *o = objFor(self);
++    if(!o || !pInterface || !iid) return SL_RESULT_PARAMETER_INVALID;
++    if(idsEqual(iid, SL_IID_ENGINE) && o->kind == 0) {
++        o->engineItf.CreateLEDDevice = nullptr;
++        o->engineItf.CreateVibraDevice = nullptr;
++        o->engineItf.CreateAudioPlayer = eng_CreateAudioPlayer;
++        o->engineItf.CreateAudioRecorder = nullptr;
++        o->engineItf.CreateMidiPlayer = nullptr;
++        o->engineItf.CreateListener = nullptr;
++        o->engineItf.Create3DGroup = nullptr;
++        o->engineItf.CreateOutputMix = eng_CreateOutputMix;
++        o->engineItf.CreateMetadataExtractor = nullptr;
++        o->engineItf.CreateExtensionObject = nullptr;
++        o->engineItf.QueryNumSupportedInterfaces = nullptr;
++        o->engineItf.QuerySupportedInterfaces = nullptr;
++        *(SLEngineItf *)pInterface = (SLEngineItf)&o->engineItf;
++        return SL_RESULT_SUCCESS;
++    }
++    if(o->kind != 2) return SL_RESULT_PRECONDITIONS_VIOLATED;
++    if(idsEqual(iid, SL_IID_PLAY)) {
++        o->playItf = { play_SetPlayState, play_GetPlayState, play_GetDuration, play_GetPosition,
++                       play_RegisterCallback, play_SetCbMask, play_GetCbMask, play_SetMarker,
++                       play_ClearMarker, play_GetMarker, play_SetPeriod, play_GetPeriod };
++        *(SLPlayItf *)pInterface = (SLPlayItf)&o->playItf;
++    } else if(idsEqual(iid, SL_IID_VOLUME)) {
++        o->volumeItf = { vol_SetVolumeLevel, vol_GetVolumeLevel, vol_GetMaxVolumeLevel, vol_SetMute, vol_GetMute,
++                         vol_EnableStereoPosition, vol_GetStereoPosition, vol_ZeroBool, vol_GetBool, vol_ZeroBool,
++                         vol_GetBool, vol_ZeroBool, vol_GetBool, vol_ZeroBool, vol_GetBool };
++        *(SLVolumeItf *)pInterface = (SLVolumeItf)&o->volumeItf;
++    } else if(idsEqual(iid, SL_IID_SEEK)) {
++        o->seekItf = { seek_SetPosition, seek_SetLoop, seek_GetLoop };
++        *(SLSeekItf *)pInterface = (SLSeekItf)&o->seekItf;
++    } else if(idsEqual(iid, SL_IID_PREFETCHSTATUS)) {
++        o->prefetchItf = { pref_GetPrefetchStatus, pref_GetFillLevel, pref_RegisterCallback };
++        *(SLPrefetchStatusItf *)pInterface = (SLPrefetchStatusItf)&o->prefetchItf;
++    } else if(idsEqual(iid, SL_IID_METADATAEXTRACTION)) {
++        o->metaItf = { meta_GetItemCount, meta_Size, nullptr, meta_Size, nullptr, nullptr, nullptr };
++        *(SLMetadataExtractionItf *)pInterface = (SLMetadataExtractionItf)&o->metaItf;
++    } else if(idsEqual(iid, SL_IID_ANDROIDSIMPLEBUFFERQUEUE)) {
++        o->queueItf = { queue_Enqueue, queue_Clear, queue_GetState, queue_RegisterCallback,
++                        queue_QueryNumBuffersInUse, queue_GetBuffer };
++        *(SLAndroidSimpleBufferQueueItf *)pInterface = (SLAndroidSimpleBufferQueueItf)&o->queueItf;
++    } else {
++        return SL_RESULT_PRECONDITIONS_VIOLATED;
++    }
++    return SL_RESULT_SUCCESS;
++}
++
++} // namespace
++
++// ---- Exports ----
++
++extern "C" const unsigned char SL_IID_ENGINE[16] = { 0xAE, 0xCB, 0x9F, 0x35, 0x7C, 0x12, 0x7D, 0x98, 0x85, 0x3B, 0x00, 0x9D, 0xEC, 0x7A, 0x9E, 0x44 };
++extern "C" const unsigned char SL_IID_PLAY[16] = { 0xEF, 0x0A, 0x71, 0x4E, 0xD8, 0xA3, 0x42, 0x74, 0x93, 0x9D, 0x3A, 0xDD, 0x58, 0xC0, 0x34, 0x48 };
++extern "C" const unsigned char SL_IID_VOLUME[16] = { 0x09, 0x62, 0x91, 0xE0, 0xA5, 0x66, 0x4E, 0x63, 0x90, 0x97, 0x65, 0x0C, 0xEF, 0x12, 0x56, 0x6A };
++extern "C" const unsigned char SL_IID_SEEK[16] = { 0x87, 0xF1, 0x90, 0x38, 0xF6, 0x59, 0x4A, 0x12, 0x84, 0x8D, 0xA1, 0xDC, 0xA3, 0x60, 0x5C, 0x50 };
++extern "C" const unsigned char SL_IID_PREFETCHSTATUS[16] = { 0x2E, 0xC9, 0x8F, 0x7B, 0x29, 0x54, 0x4E, 0x0E, 0xB2, 0x0B, 0x48, 0xA9, 0xB9, 0x6A, 0x56, 0xD4 };
++extern "C" const unsigned char SL_IID_METADATAEXTRACTION[16] = { 0x8F, 0x5D, 0x9E, 0x1F, 0x8F, 0x6B, 0x4A, 0x39, 0x8B, 0x9C, 0x1C, 0xAB, 0x6C, 0x36, 0xA8, 0xB7 };
++extern "C" const unsigned char SL_IID_ANDROIDSIMPLEBUFFERQUEUE[16] = { 0x19, 0x8A, 0x7F, 0x2B, 0x2B, 0xA7, 0x4C, 0xE8, 0xB3, 0xA1, 0x6A, 0x9A, 0x3C, 0x4D, 0x2B, 0x8F };
++
++extern "C" SLresult slCreateEngine(SLObjectItf *pEngine, SLuint32 numOptions, const void *options,
++                                   SLuint32 numInterfaces, const char **ids, const SLboolean *req) {
++    (void)numOptions; (void)options; (void)numInterfaces; (void)ids; (void)req;
++    auto *o = new ObjectImpl();
++    o->kind = 0;
++    o->objItf.Realize = obj_Realize;
++    o->objItf.Resume = obj_Resume;
++    o->objItf.GetState = obj_GetState;
++    o->objItf.GetInterface = obj_GetInterface;
++    o->objItf.RegisterCallback = obj_RegisterCallback;
++    o->objItf.AbortAsyncOperation = obj_AbortAsyncOperation;
++    o->objItf.Destroy = obj_Destroy;
++    *pEngine = (SLObjectItf)&o->objItf;
++    return SL_RESULT_SUCCESS;
++}
++
++namespace OpenSL {
++
++std::unordered_map<std::string, void *> getSymbols() {
++    return {
++        {"slCreateEngine", (void *)&slCreateEngine},
++        {"SL_IID_ENGINE", (void *)SL_IID_ENGINE},
++        {"SL_IID_PLAY", (void *)SL_IID_PLAY},
++        {"SL_IID_VOLUME", (void *)SL_IID_VOLUME},
++        {"SL_IID_SEEK", (void *)SL_IID_SEEK},
++        {"SL_IID_PREFETCHSTATUS", (void *)SL_IID_PREFETCHSTATUS},
++        {"SL_IID_METADATAEXTRACTION", (void *)SL_IID_METADATAEXTRACTION},
++        {"SL_IID_ANDROIDSIMPLEBUFFERQUEUE", (void *)SL_IID_ANDROIDSIMPLEBUFFERQUEUE},
++    };
++}
++
++} // namespace OpenSL
+\ No newline at end of file
+diff --git a/src/minecraft_utils.cpp b/src/minecraft_utils.cpp
+index d7f2360..fc0107f 100644
+--- a/src/minecraft_utils.cpp
++++ b/src/minecraft_utils.cpp
+@@ -1,4 +1,5 @@
+ #include <mcpelauncher/minecraft_utils.h>
++#include <mcpelauncher/fake_opensl.h>
+ #include <mcpelauncher/patch_utils.h>
+ #include <mcpelauncher/hybris_utils.h>
+ #include <mcpelauncher/fmod_utils.h>
+@@ -107,8 +108,7 @@ void MinecraftUtils::setupHybris() {
+                                libz_symbols);
+     HybrisUtils::hookAndroidLog();
+     setupApi();
+-    linker::load_library("libOpenSLES.so", {});
+-    linker::load_library("libGLESv1_CM.so", {});
++    linker::load_library("libOpenSLES.so", OpenSL::getSymbols());
+ 
+     linker::load_library("libstdc++.so", {});
+     linker::load_library("libz.so", {});  // needed for <0.17
+@@ -985,3 +985,33 @@ void MinecraftUtils::setupGLES2Symbols(void* (*resolver)(const char*)) {
+     }
+     linker::load_library("libGLESv2.so", syms);
+ }
++
++void MinecraftUtils::setupGLES1Symbols(void* (*resolver)(const char*)) {
++    int i = 0;
++    std::unordered_map<std::string, void*> syms;
++    static const char* gles1_symbols[] = {
++            "glMapBufferOES",
++            "glUnmapBufferOES",
++            "glGetBufferPointervOES",
++            "glBufferData",
++            "glBufferSubData",
++            "glBindBuffer",
++            "glGetIntegerv",
++            "glGetString",
++            "glGetError",
++            "glViewport",
++            "glClear",
++            "glClearColor",
++            nullptr
++    };
++    while(true) {
++        const char* sym = gles1_symbols[i];
++        if(sym == nullptr)
++            break;
++        void* f = resolver(sym);
++        if(f)
++            syms[sym] = f;
++        i++;
++    }
++    linker::load_library("libGLESv1_CM.so", syms);
++}

@@ -1,0 +1,181 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 44c6d1c..9809537 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,6 +5,7 @@ project(libc-shim LANGUAGES C CXX)
+ add_library(libc-shim src/common.cpp src/pthreads.cpp src/pthreads.h src/meta.h src/common.h src/semaphore.cpp src/semaphore.h src/network.cpp src/network.h src/dirent.cpp src/dirent.h src/cstdio.cpp src/cstdio.h src/errno.cpp src/errno.h src/ctype_data.h src/ctype_data.cpp src/bionic/strlcpy.cpp src/stat.cpp src/stat.h src/file_misc.cpp src/file_misc.h src/sysconf.cpp src/sysconf.h src/system_properties.cpp src/system_properties.h src/iorewrite.cpp src/iorewrite.h src/statvfs.h src/statvfs.cpp src/sched.h src/sched.cpp)
+ target_include_directories(libc-shim PUBLIC include/)
+ target_link_libraries(libc-shim PRIVATE logger)
++target_compile_definitions(libc-shim PRIVATE _GNU_SOURCE=1)
+ 
+ if(APPLE OR FREEBSD)
+     target_link_libraries(libc-shim PRIVATE epoll-shim)
+diff --git a/src/common.cpp b/src/common.cpp
+index 2ef6d95..c338621 100644
+--- a/src/common.cpp
++++ b/src/common.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include <log.h>
+ #include <stdexcept>
++#include <ctype.h>
+ #include "common.h"
+ #include "pthreads.h"
+ #include "semaphore.h"
+@@ -29,6 +30,13 @@
+ #include <sys/mman.h>
+ #include <sys/resource.h>
+ #include <sys/utsname.h>
++#include <sys/inotify.h>
++#include <sys/random.h>
++#include <sys/syscall.h>
++#include <sched.h>
++#include <signal.h>
++#include <syslog.h>
++#include <cstdlib>
+ #include <csetjmp>
+ #include <clocale>
+ #include <locale.h>
+@@ -713,6 +721,7 @@ void shim::add_time_shimmed_symbols(std::vector<shim::shimmed_symbol> &list) {
+ void shim::add_wait_shimmed_symbols(std::vector<shim::shimmed_symbol> &list) {
+     list.insert(list.end(), {
+         {"waitpid", ::waitpid},
++        {"wait4", ::wait4},
+     });
+ }
+ 
+@@ -765,6 +774,8 @@ void shim::add_unistd_shimmed_symbols(std::vector<shim::shimmed_symbol> &list) {
+         {"dup", WithErrnoUpdate(::dup)},
+         {"dup2", WithErrnoUpdate(::dup2)},
+         {"execv", WithErrnoUpdate(::execv)},
++        {"execve", WithErrnoUpdate(::execve)},
++        {"execvpe", WithErrnoUpdate(::execvpe)},
+         {"execle", ::execle},
+         {"execl", ::execl},
+         {"execvp", ::execvp},
+@@ -926,8 +937,8 @@ void shim::add_string_shimmed_symbols(std::vector<shim::shimmed_symbol> &list) {
+         {"bcopy", ::bcopy},
+         {"bzero", ::bzero},
+         {"ffs", ::ffs},
+-        {"index", ::index},
+-        {"rindex", ::rindex},
++        {"index", (char *(*)(char *, int)) ::index},
++        {"rindex", (char *(*)(char *, int)) ::rindex},
+         {"strcasecmp", ::strcasecmp},
+         {"strncasecmp", ::strncasecmp},
+     });
+@@ -1065,10 +1076,60 @@ void shim::add_setjmp_shimmed_symbols(std::vector<shim::shimmed_symbol> &list) {
+     });
+ }
+ 
++extern char *__progname;
++static const char *getprognameImpl() { return __progname; }
++
++static void shim_assert2(const char *file, int line, const char *func, const char *failed) {
++    fprintf(stderr, "Assertion failed: %s, file %s, line %d, function %s\n", failed, file, line, func);
++    abort();
++}
++static void shim_android_set_abort_message(const char *msg) { (void)msg; }
++
++static int shim_getentropy(void *buffer, size_t length) {
++    if(!buffer || length > 256)
++        return -1;
++    if(::getrandom(buffer, length, 0) == (ssize_t)length)
++        return 0;
++    return -1;
++}
++static uint32_t shim_arc4random_uniform(uint32_t upper_bound) {
++    if(upper_bound < 2)
++        return 0;
++    uint32_t min = -upper_bound % upper_bound;
++    uint32_t r;
++    do { r = ::arc4random(); } while(r < min);
++    return r % upper_bound;
++}
++static int shim_tgkill(int tgid, int tid, int sig) {
++    return (int)syscall(SYS_tgkill, tgid, tid, sig);
++}
++
+ void shim::add_misc_shimmed_symbols(std::vector<shim::shimmed_symbol> &list) {
++    static char **shim_environ = ::environ;
++    static const char *const *shim_progname = &::__progname;
++    static FILE *shim_sF = stdout;
+     list.insert(list.end(), {
+         {"uname", uname}, // TODO: This may be wrong?
+ 
++        {"environ", &shim_environ},
++
++        {"__progname", (void *)&::__progname},
++        {"getprogname", (void *)&getprognameImpl},
++        {"__sF", &shim_sF},
++        {"__assert2", (void *)&shim_assert2},
++        {"android_set_abort_message", (void *)&shim_android_set_abort_message},
++        {"getentropy", (void *)&shim_getentropy},
++        {"arc4random_uniform", (void *)&shim_arc4random_uniform},
++        {"usleep", (void *)&::usleep},
++        {"timegm", (void *)&::timegm},
++        {"vsyslog", (void *)&::vsyslog},
++        {"tgkill", (void *)&shim_tgkill},
++        {"pthread_sigmask", (void *)&::pthread_sigmask},
++        {"inotify_init", (void *)&::inotify_init},
++        {"inotify_init1", (void *)&::inotify_init1},
++        {"inotify_add_watch", (void *)&::inotify_add_watch},
++        {"inotify_rm_watch", (void *)&::inotify_rm_watch},
++
+         {"utime", utime},
+ 
+         {"writev", writev},
+diff --git a/src/network.cpp b/src/network.cpp
+index 6576534..91ee397 100644
+--- a/src/network.cpp
++++ b/src/network.cpp
+@@ -748,6 +748,10 @@ void shim::add_network_shimmed_symbols(std::vector<shim::shimmed_symbol> &list)
+         {"gethostbyname", gethostbyname},
+         {"gethostbyname2", gethostbyname2},
+         {"gethostent", gethostent},
++        {"getprotobyname", ::getprotobyname},
++        {"getprotobynumber", ::getprotobynumber},
++        {"getservbyname", ::getservbyname},
++        {"getservbyport", ::getservbyport},
+ 
+         /* arpa/inet.h */
+         {"inet_addr", inet_addr},
+diff --git a/src/network.h b/src/network.h
+index 255df74..cb9a8a6 100644
+--- a/src/network.h
++++ b/src/network.h
+@@ -91,7 +91,7 @@ namespace shim {
+         size_t get_bionic_len(const ::sockaddr *in);
+ 
+         struct addrinfo {
+-            ai_flags ai_flags;
++            ::shim::bionic::ai_flags ai_flags;
+             af_family ai_family;
+             socktype ai_socktype;
+             ipproto ai_protocol;
+diff --git a/src/pthreads.cpp b/src/pthreads.cpp
+index eaf28fe..1ee1d64 100644
+--- a/src/pthreads.cpp
++++ b/src/pthreads.cpp
+@@ -407,7 +407,7 @@ int shim::pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, c
+ }
+ 
+ int shim::pthread_condattr_init(pthread_condattr_t *attr) {
+-    *attr = {false, bionic::clock_type::MONOTONIC};
++    *attr = pthread_condattr_t{false, bionic::clock_type::MONOTONIC};
+     return 0;
+ }
+ 
+diff --git a/src/pthreads.h b/src/pthreads.h
+index ab1a023..3123941 100644
+--- a/src/pthreads.h
++++ b/src/pthreads.h
+@@ -147,7 +147,7 @@ namespace shim {
+             void* stack_base;
+             size_t stack_size;
+             size_t guard_size;
+-            sched_policy sched_policy;
++            ::shim::bionic::sched_policy sched_policy;
+             int sched_priority;
+ #if defined(__LP64__)
+             int64_t priv[2];
