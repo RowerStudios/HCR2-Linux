@@ -76,6 +76,20 @@ Key reverse-engineering results:
 - Once the loader finishes its sync-submit, register `onFinishedAssetLoader()` on the fake `Hcr2Activity`; verify the game exits the loading stage.
 - Then build the input path: direct mouse/keyboard → engine (no touch translation).
 
+### 6. ✅ Boot blocker resolved: OpenSL ES fake ABI + game boots & renders
+Two distinct ABI bugs in `fake_opensl.cpp` were root-caused from live crash state and fixed:
+
+**Bug A — interface handle ABI.** The original fake stored `*pEngine = &o->objItf` (an embedded struct) and treated handles as `struct*`. Real OpenSL ES handles are a **pointer-to-pointer** (`SLObjectItf = const SLObjectItf_ *const *`; `(*handle)->Method`). The engine dereferenced the function address as a pointer table → SIGSEGV at `engine+0x1b93ad4` (`call *(%rax)`, `si_addr=(nil)`) during audio-engine init. `fake_opensl.cpp` was rewritten to the classic layout: shared static vtable instances (`g_objectVf/g_engineVf/g_playVf/...`), `ObjectImpl` stores `const *Vf` at 0x0..0x38 and `kind` at 0x40, handles are `&o-><vfPtr>`, and `objFor` resolves them via a `g_owners` map.
+
+**Bug B — IID comparison.** The game calls `obj_GetInterface(itf, iid, out)` passing its **own baked-in** IID as a bare 8-byte value equal to the uuid's first 8 bytes (e.g. `iid=0x987d127c359fcbae` ⇔ ENGINE uuid `AE CB 9F 35 7C 12 7D 98 …`), never a readable pointer to the 16-byte uuid. The old code dereferenced `iid` as a pointer → `xor (%r11),%rcx` fault when `r11=0x987d…`. Fixed with `iidIs()`: if `iid` looks like a readable pointer, `memcmp` 16 bytes; otherwise compare the raw 8 pointer-value bytes against each uuid's leading 8 bytes.
+
+(Attempted but not needed: exporting `SL_IID_*` as 8-byte pointer-variables instead of 16-byte arrays — the game doesn't import our IID symbols at all; `readelf --dyn-syms` shows no `SL_IID`/`slCreateEngine` imports, so `getSymbols()` IID entries are inert. Left as-is, harmless.)
+
+**Result (run76):** game fully boots. `opensl.log` shows a single `GetInterface` handled cleanly; the log segfault branch is gone; the process renders continuously — `eglSwapBuffers` spins for the full 45 s `timeout` window to `rc=137` (our own SIGKILL timer, not a crash). Survivor: the asset loader (Frame 6) and all audio init now complete. Only benign warnings remain (`Fail to get Android API level!`, missing `splash-video.ogg`, null audio player — audio is intentionally dropped).
+
+**Remaining gap:** no input yet — `onFinishedAssetLoader` not registered on the fake `Hcr2Activity`, and no mouse/keyboard path. The game boots to the loading/main loop but has no interactivity.
+
+
 ---
 
 ## Dispatcher notes (misc RE)
@@ -89,6 +103,8 @@ Key reverse-engineering results:
 - `run54..run65` — early boot, JNI binds, thread census.
 - `run69` — apkPath fix lands → frame 4 193 ms.
 - `run70` — FP-chain capture of the stall; `renderstack.txt` generated.
+- `run75` — user-run (rc=139): OpenSL handle ABI fixed, crash moved into `obj_GetInterface` (`iid` deref).
+- `run76` — ✅ OpenSL IID deref fixed → **game boots and renders continuously** (rc=137 = own 45 s KILL timer).
 
 ---
 
@@ -98,8 +114,9 @@ Key reverse-engineering results:
 - `hcr2_src*` — jadx/cfr decompile of `AppActivity.java` + `org.cocos2dx.lib`.
 
 ## Next steps (short list)
-1. Intercept `pthread_detach` at stall → identify the object, decide return-vs-join.
-2. Unblock the fork → loader completes → verify post-loading frames.
-3. Register `onFinishedAssetLoader` on the fake activity.
+1. ✅ `pthread_detach` GOT-shim (return 0, no join) — done in jni_support.cpp.
+2. ✅ Unblock the fork → loader completes → game boots & renders — done (run76).
+3. Register `onFinishedAssetLoader` on the fake `Hcr2Activity`; confirm loading-stage frame transitions.
+4. Build the input path: thread mouse/keyboard → engine (touch translated or direct).
 4. Input: keyboard/mouse natives on the Cocos thread.
 5. Polish: window, vsync, audio (OpenSL path already shimmed 48000/240).
