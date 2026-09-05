@@ -389,7 +389,7 @@ index df2d51b..07f8b08 100644
  END_NATIVE_DESCRIPTOR
  
 diff --git a/src/jni/jni_support.cpp b/src/jni/jni_support.cpp
-index c71fd70..a4891f1 100644
+index c71fd70..8f558d3 100644
 --- a/src/jni/jni_support.cpp
 +++ b/src/jni/jni_support.cpp
 @@ -2,6 +2,7 @@
