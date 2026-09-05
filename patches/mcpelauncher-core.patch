@@ -43,32 +43,43 @@ index 726fb21..cd11292 100644
  };
 diff --git a/src/fake_opensl.cpp b/src/fake_opensl.cpp
 new file mode 100644
-index 0000000..a572e2a
+index 0000000..d2a3612
 --- /dev/null
 +++ b/src/fake_opensl.cpp
-@@ -0,0 +1,432 @@
+@@ -0,0 +1,530 @@
 +#include <mcpelauncher/fake_opensl.h>
 +#include <cstdint>
 +#include <cstring>
 +#include <cstddef>
++#include <cstdio>
++#include <fcntl.h>
++#include <unistd.h>
++#include <unordered_map>
 +
-+// Exported OpenSL ES interface IDs: the game imports these by symbol name, so
-+// each resolves to the address of the matching array below.
-+extern "C" const unsigned char SL_IID_ENGINE[16];
-+extern "C" const unsigned char SL_IID_PLAY[16];
-+extern "C" const unsigned char SL_IID_VOLUME[16];
-+extern "C" const unsigned char SL_IID_SEEK[16];
-+extern "C" const unsigned char SL_IID_PREFETCHSTATUS[16];
-+extern "C" const unsigned char SL_IID_METADATAEXTRACTION[16];
-+extern "C" const unsigned char SL_IID_ANDROIDSIMPLEBUFFERQUEUE[16];
++// Exported OpenSL ES interface IDs: the game imports these by symbol name, and
++// per the khronos ABI each is an 8-byte POINTER VARIABLE whose value is the
++// address of a 16-byte uuid struct. Exporting the raw uuid array breaks because
++// a COPY relocation then copies the uuid's first 8 bytes into the importer's
++// slot, which it dereferences as a pointer.
++struct SL_IID { unsigned char data[16]; };
++extern "C" const SL_IID * SL_IID_ENGINE;
++extern "C" const SL_IID * SL_IID_PLAY;
++extern "C" const SL_IID * SL_IID_VOLUME;
++extern "C" const SL_IID * SL_IID_SEEK;
++extern "C" const SL_IID * SL_IID_PREFETCHSTATUS;
++extern "C" const SL_IID * SL_IID_METADATAEXTRACTION;
++extern "C" const SL_IID * SL_IID_ANDROIDSIMPLEBUFFERQUEUE;
++
++namespace { extern const SL_IID gIID_ENGINE, gIID_PLAY, gIID_VOLUME, gIID_SEEK,
++    gIID_PREFETCHSTATUS, gIID_METADATAEXTRACTION, gIID_ANDROIDSIMPLEBUFFERQUEUE; }
 +
 +// Minimal OpenSL ES subset required by Cocos2d-x's Android audio player.
 +//
-+// Classic OpenSL ES ABI: every interface is a struct of inline function
-+// pointers. A handle is a pointer to a pointer to that struct, and a method is
-+// invoked as (*handle)->Method(handle, args...). All objects of a kind share
-+// one vtable "table struct" instance; GetInterface returns pointers to the
-+// per-object interface structs embedded in the object implementation block.
++// Classic OpenSL ES ABI: every interface handle is a POINTER TO A POINTER to
++// its vtable struct, and a method is invoked as (*handle)->Method(handle,...).
++// An object implementation therefore stores a pointer to a (shared, static)
++// vtable instance; the handle handed to the app is the address of that stored
++// pointer. GetInterface returns pointers to per-object stored vtable pointers.
 +
 +namespace {
 +
@@ -134,6 +145,44 @@ index 0000000..a572e2a
 +using Fn = void (*)();
 +static Fn wedged() { return nullptr; }
 +
++// Prototypes for the remaining interface methods (referenced by the shared
++// vtable instances below before their definitions).
++SLresult play_SetPlayState(SLPlayItf, SLuint32);
++SLresult play_GetPlayState(SLPlayItf, SLuint32 *);
++SLresult play_GetDuration(SLPlayItf, SLmillisecond *);
++SLresult play_GetPosition(SLPlayItf, SLmillisecond *);
++SLresult play_RegisterCallback(SLPlayItf, void *, void *);
++SLresult play_SetCbMask(SLPlayItf, SLuint32);
++SLresult play_GetCbMask(SLPlayItf, SLuint32 *);
++SLresult play_SetMarker(SLPlayItf, SLmillisecond);
++SLresult play_ClearMarker(SLPlayItf);
++SLresult play_GetMarker(SLPlayItf, SLmillisecond *);
++SLresult play_SetPeriod(SLPlayItf, SLmillisecond);
++SLresult play_GetPeriod(SLPlayItf, SLmillisecond *);
++SLresult vol_SetVolumeLevel(SLVolumeItf, SLmillibel);
++SLresult vol_GetVolumeLevel(SLVolumeItf, SLmillibel *);
++SLresult vol_GetMaxVolumeLevel(SLVolumeItf, SLmillibel *);
++SLresult vol_SetMute(SLVolumeItf, SLboolean);
++SLresult vol_GetMute(SLVolumeItf, SLboolean *);
++SLresult vol_ZeroBool(SLVolumeItf, SLboolean);
++SLresult vol_GetBool(SLVolumeItf, SLboolean *);
++SLresult vol_EnableStereoPosition(SLVolumeItf, SLboolean);
++SLresult vol_GetStereoPosition(SLVolumeItf, SLpermille *);
++SLresult seek_SetPosition(SLSeekItf, SLmillisecond);
++SLresult seek_SetLoop(SLSeekItf, SLboolean, SLmillisecond, SLmillisecond);
++SLresult seek_GetLoop(SLSeekItf, SLboolean *, SLmillisecond *, SLmillisecond *);
++SLresult pref_GetPrefetchStatus(SLPrefetchStatusItf, SLuint32 *);
++SLresult pref_GetFillLevel(SLPrefetchStatusItf, SLpermille *);
++SLresult pref_RegisterCallback(SLPrefetchStatusItf, void *, void *);
++SLresult meta_GetItemCount(SLMetadataExtractionItf, SLuint32 *);
++SLresult meta_Size(SLMetadataExtractionItf, SLuint32, SLuint32 *);
++SLresult queue_Enqueue(SLAndroidSimpleBufferQueueItf, void *, SLuint32);
++SLresult queue_Clear(SLAndroidSimpleBufferQueueItf);
++SLresult queue_GetState(SLAndroidSimpleBufferQueueItf, SLAndroidSimpleBufferQueueState *);
++SLresult queue_RegisterCallback(SLAndroidSimpleBufferQueueItf, SLAndroidSimpleBufferQueueCallback, void *);
++SLresult queue_QueryNumBuffersInUse(SLAndroidSimpleBufferQueueItf, SLuint32 *);
++SLresult queue_GetBuffer(SLAndroidSimpleBufferQueueItf, SLuint32, const void **);
++
 +struct SLObjectItf_ {
 +    SLresult (*Realize)(SLObjectItf, SLboolean);
 +    SLresult (*Resume)(SLObjectItf, SLboolean);
@@ -186,7 +235,6 @@ index 0000000..a572e2a
 +    SLresult (*EnableOnlyPosition)(SLVolumeItf, SLboolean);
 +    SLresult (*GetEnableOnlyPosition)(SLVolumeItf, SLboolean *);
 +    SLresult (*SetEnableStereoPosition)(SLVolumeItf, SLboolean);
-+    SLresult (*GetEnableStereoPosition)(SLVolumeItf, SLboolean *);
 +};
 +struct SLSeekItf_ {
 +    SLresult (*SetPosition)(SLSeekItf, SLmillisecond);
@@ -216,33 +264,95 @@ index 0000000..a572e2a
 +    SLresult (*GetBuffer)(SLAndroidSimpleBufferQueueItf, SLuint32, const void **);
 +};
 +
++// ---- Shared vtable instances (one per interface type) ----
++
++static SLObjectItf_ g_objectVf = {
++    obj_Realize, obj_Resume, obj_GetState, obj_GetInterface,
++    obj_RegisterCallback, obj_AbortAsyncOperation, obj_Destroy,
++};
++static SLEngineItf_ g_engineVf = {
++    wedged(), wedged(), eng_CreateAudioPlayer, wedged(), wedged(), wedged(), wedged(),
++    eng_CreateOutputMix, wedged(), wedged(), wedged(), wedged(),
++};
++static SLPlayItf_ g_playVf = {
++    play_SetPlayState, play_GetPlayState, play_GetDuration, play_GetPosition,
++    play_RegisterCallback, play_SetCbMask, play_GetCbMask, play_SetMarker,
++    play_ClearMarker, play_GetMarker, play_SetPeriod, play_GetPeriod,
++};
++static SLVolumeItf_ g_volumeVf = {
++    vol_SetVolumeLevel, vol_GetVolumeLevel, vol_GetMaxVolumeLevel, vol_SetMute, vol_GetMute,
++    vol_EnableStereoPosition, vol_GetStereoPosition, vol_ZeroBool, vol_GetBool, vol_ZeroBool,
++    vol_GetBool, vol_ZeroBool, vol_GetBool, vol_ZeroBool,
++};
++static SLSeekItf_ g_seekVf = { seek_SetPosition, seek_SetLoop, seek_GetLoop };
++static SLPrefetchStatusItf_ g_prefetchVf = { pref_GetPrefetchStatus, pref_GetFillLevel, pref_RegisterCallback };
++static SLMetadataExtractionItf_ g_metaVf = { meta_GetItemCount, meta_Size, nullptr, meta_Size, nullptr, nullptr, nullptr };
++static SLAndroidSimpleBufferQueueItf_ g_queueVf = {
++    queue_Enqueue, queue_Clear, queue_GetState, queue_RegisterCallback,
++    queue_QueryNumBuffersInUse, queue_GetBuffer,
++};
++
++// Function pointer round-trip helper: build per-interface structs from the
++// shared static instances (avoids reading vtable through a void* cast).
++
 +// ---- Object implementation block ----
++//
++// The classic ABI: an object block stores a pointer to its vtable struct, and
++// the handle handed out is &storedPtr (a pointer to pointer). Every member
++// below that starts with a stored *Vf pointer is a legal handle source.
 +
 +struct ObjectImpl {
++    const SLObjectItf_ *objVf;   // offset 0; handle = &this
++    const SLEngineItf_ *engineVf;
++    const SLPlayItf_ *playVf;
++    const SLVolumeItf_ *volumeVf;
++    const SLSeekItf_ *seekVf;
++    const SLPrefetchStatusItf_ *prefetchVf;
++    const SLMetadataExtractionItf_ *metaVf;
++    const SLAndroidSimpleBufferQueueItf_ *queueVf;
 +    SLuint32 kind; // 0 = engine, 1 = output mix, 2 = audio player
 +    bool realized = false;
 +    SLuint32 playState = SL_PLAYSTATE_STOPPED;
 +    SLuint32 prefetchStatus = SL_PREFETCHSTATUS_SUCCEEDED;
 +    SLAndroidSimpleBufferQueueCallback queueCallback = nullptr;
 +    void *queueContext = nullptr;
-+
-+    SLObjectItf_ objItf{};
-+    SLEngineItf_ engineItf{};
-+    SLPlayItf_ playItf{};
-+    SLVolumeItf_ volumeItf{};
-+    SLSeekItf_ seekItf{};
-+    SLPrefetchStatusItf_ prefetchItf{};
-+    SLMetadataExtractionItf_ metaItf{};
-+    SLAndroidSimpleBufferQueueItf_ queueItf{};
 +};
 +
++static std::unordered_map<uintptr_t, ObjectImpl *> g_owners;
++
 +ObjectImpl *objFor(SLObjectItf self) {
-+    if(!self || !*self) return nullptr;
-+    // self == &objItf (we always store the address of the SLObjectItf_ member).
-+    return (ObjectImpl *)((char *)(*self) - offsetof(ObjectImpl, objItf));
++    if(!self) return nullptr;
++    auto it = g_owners.find((uintptr_t)self);
++    return it == g_owners.end() ? nullptr : it->second;
 +}
-+ObjectImpl *objForItf(const void *itfMember) {
-+    return (ObjectImpl *)((char *)itfMember - offsetof(ObjectImpl, objItf));
++ObjectImpl *objForItf(const void *itf) {
++    if(!itf) return nullptr;
++    auto it = g_owners.find((uintptr_t)itf);
++    return it == g_owners.end() ? nullptr : it->second;
++}
++
++void registerOwner(const void *p, ObjectImpl *o) { g_owners[(uintptr_t)p] = o; }
++
++ObjectImpl *newObject(SLuint32 kind) {
++    auto *o = new ObjectImpl();
++    o->kind = kind;
++    o->objVf = &g_objectVf;
++    o->engineVf = &g_engineVf;
++    o->playVf = &g_playVf;
++    o->volumeVf = &g_volumeVf;
++    o->seekVf = &g_seekVf;
++    o->prefetchVf = &g_prefetchVf;
++    o->metaVf = &g_metaVf;
++    o->queueVf = &g_queueVf;
++    registerOwner(&o->objVf, o);
++    registerOwner(&o->engineVf, o);
++    registerOwner(&o->playVf, o);
++    registerOwner(&o->volumeVf, o);
++    registerOwner(&o->seekVf, o);
++    registerOwner(&o->prefetchVf, o);
++    registerOwner(&o->metaVf, o);
++    registerOwner(&o->queueVf, o);
++    return o;
 +}
 +
 +// ---- SLObjectItf methods ----
@@ -273,32 +383,16 @@ index 0000000..a572e2a
 +
 +SLresult eng_CreateOutputMix(SLEngineItf self, SLObjectItf *pMix, SLuint32 n, const char **ids, const SLboolean *req) {
 +    (void)self; (void)n; (void)ids; (void)req;
-+    auto *o = new ObjectImpl();
-+    o->kind = 1;
-+    o->objItf.Realize = obj_Realize;
-+    o->objItf.Resume = obj_Resume;
-+    o->objItf.GetState = obj_GetState;
-+    o->objItf.GetInterface = obj_GetInterface;
-+    o->objItf.RegisterCallback = obj_RegisterCallback;
-+    o->objItf.AbortAsyncOperation = obj_AbortAsyncOperation;
-+    o->objItf.Destroy = obj_Destroy;
-+    *pMix = (SLObjectItf)&o->objItf;
++    ObjectImpl *o = newObject(1);
++    *pMix = (SLObjectItf)&o->objVf;
 +    return SL_RESULT_SUCCESS;
 +}
 +
 +SLresult eng_CreateAudioPlayer(SLEngineItf self, SLObjectItf *pPlayer, const SLDataSourcePlaceholder *src,
 +                               const SLDataSinkPlaceholder *sink, SLuint32 n, const char **ids, const SLboolean *req) {
 +    (void)self; (void)src; (void)sink; (void)n; (void)ids; (void)req;
-+    auto *o = new ObjectImpl();
-+    o->kind = 2;
-+    o->objItf.Realize = obj_Realize;
-+    o->objItf.Resume = obj_Resume;
-+    o->objItf.GetState = obj_GetState;
-+    o->objItf.GetInterface = obj_GetInterface;
-+    o->objItf.RegisterCallback = obj_RegisterCallback;
-+    o->objItf.AbortAsyncOperation = obj_AbortAsyncOperation;
-+    o->objItf.Destroy = obj_Destroy;
-+    *pPlayer = (SLObjectItf)&o->objItf;
++    ObjectImpl *o = newObject(2);
++    *pPlayer = (SLObjectItf)&o->objVf;
 +    return SL_RESULT_SUCCESS;
 +}
 +
@@ -382,53 +476,53 @@ index 0000000..a572e2a
 +
 +// ---- obj_GetInterface ----
 +
-+static bool idsEqual(const char *a, const unsigned char *b) {
-+    return a == (const char *)b || (a && b && memcmp(a, b, 16) == 0);
++// The game may hand GetInterface either a real pointer to the 16-byte uuid, or
++// (observed with baked constants) the raw uuid bytes as a pointer-sized value.
++// Handle both without faulting: if `iid` looks like a readable pointer, memcmp
++// 16 bytes; otherwise compare the 8 raw bytes of the pointer value.
++static bool iidIs(const char *iid, const unsigned char *uuid) {
++    if(!iid) return false;
++    uintptr_t v = (uintptr_t)iid;
++    if(v >= 0x10000 && v < (uintptr_t)0x7fffffffffffULL) {
++        // Plausible readable pointer: whole 16-byte uuid.
++        if(memcmp(iid, uuid, 16) == 0) return true;
++    }
++    const unsigned char b[8] = { (unsigned char)(v), (unsigned char)(v >> 8),
++                                 (unsigned char)(v >> 16), (unsigned char)(v >> 24),
++                                 (unsigned char)(v >> 32), (unsigned char)(v >> 40),
++                                 (unsigned char)(v >> 48), (unsigned char)(v >> 56) };
++    return memcmp(b, uuid, 8) == 0;
 +}
 +
 +SLresult obj_GetInterface(SLObjectItf self, const char *iid, void *pInterface) {
++    {
++        int fd = open("/home/rower/hcr2-ws/opensl.log", O_WRONLY | O_APPEND | O_CREAT, 0644);
++        if(fd >= 0) {
++            char b[256];
++            int n = snprintf(b, sizeof(b), "GetInterface self=%p iid=%p pInterface=%p\n", self, iid, pInterface);
++            if(n > 0) (void)write(fd, b, n);
++            close(fd);
++        }
++    }
 +    ObjectImpl *o = objFor(self);
 +    if(!o || !pInterface || !iid) return SL_RESULT_PARAMETER_INVALID;
-+    if(idsEqual(iid, SL_IID_ENGINE) && o->kind == 0) {
-+        o->engineItf.CreateLEDDevice = nullptr;
-+        o->engineItf.CreateVibraDevice = nullptr;
-+        o->engineItf.CreateAudioPlayer = eng_CreateAudioPlayer;
-+        o->engineItf.CreateAudioRecorder = nullptr;
-+        o->engineItf.CreateMidiPlayer = nullptr;
-+        o->engineItf.CreateListener = nullptr;
-+        o->engineItf.Create3DGroup = nullptr;
-+        o->engineItf.CreateOutputMix = eng_CreateOutputMix;
-+        o->engineItf.CreateMetadataExtractor = nullptr;
-+        o->engineItf.CreateExtensionObject = nullptr;
-+        o->engineItf.QueryNumSupportedInterfaces = nullptr;
-+        o->engineItf.QuerySupportedInterfaces = nullptr;
-+        *(SLEngineItf *)pInterface = (SLEngineItf)&o->engineItf;
++    if(iidIs(iid, gIID_ENGINE.data) && o->kind == 0) {
++        *(SLEngineItf *)pInterface = (SLEngineItf)&o->engineVf;
 +        return SL_RESULT_SUCCESS;
 +    }
 +    if(o->kind != 2) return SL_RESULT_PRECONDITIONS_VIOLATED;
-+    if(idsEqual(iid, SL_IID_PLAY)) {
-+        o->playItf = { play_SetPlayState, play_GetPlayState, play_GetDuration, play_GetPosition,
-+                       play_RegisterCallback, play_SetCbMask, play_GetCbMask, play_SetMarker,
-+                       play_ClearMarker, play_GetMarker, play_SetPeriod, play_GetPeriod };
-+        *(SLPlayItf *)pInterface = (SLPlayItf)&o->playItf;
-+    } else if(idsEqual(iid, SL_IID_VOLUME)) {
-+        o->volumeItf = { vol_SetVolumeLevel, vol_GetVolumeLevel, vol_GetMaxVolumeLevel, vol_SetMute, vol_GetMute,
-+                         vol_EnableStereoPosition, vol_GetStereoPosition, vol_ZeroBool, vol_GetBool, vol_ZeroBool,
-+                         vol_GetBool, vol_ZeroBool, vol_GetBool, vol_ZeroBool, vol_GetBool };
-+        *(SLVolumeItf *)pInterface = (SLVolumeItf)&o->volumeItf;
-+    } else if(idsEqual(iid, SL_IID_SEEK)) {
-+        o->seekItf = { seek_SetPosition, seek_SetLoop, seek_GetLoop };
-+        *(SLSeekItf *)pInterface = (SLSeekItf)&o->seekItf;
-+    } else if(idsEqual(iid, SL_IID_PREFETCHSTATUS)) {
-+        o->prefetchItf = { pref_GetPrefetchStatus, pref_GetFillLevel, pref_RegisterCallback };
-+        *(SLPrefetchStatusItf *)pInterface = (SLPrefetchStatusItf)&o->prefetchItf;
-+    } else if(idsEqual(iid, SL_IID_METADATAEXTRACTION)) {
-+        o->metaItf = { meta_GetItemCount, meta_Size, nullptr, meta_Size, nullptr, nullptr, nullptr };
-+        *(SLMetadataExtractionItf *)pInterface = (SLMetadataExtractionItf)&o->metaItf;
-+    } else if(idsEqual(iid, SL_IID_ANDROIDSIMPLEBUFFERQUEUE)) {
-+        o->queueItf = { queue_Enqueue, queue_Clear, queue_GetState, queue_RegisterCallback,
-+                        queue_QueryNumBuffersInUse, queue_GetBuffer };
-+        *(SLAndroidSimpleBufferQueueItf *)pInterface = (SLAndroidSimpleBufferQueueItf)&o->queueItf;
++    if(iidIs(iid, gIID_PLAY.data)) {
++        *(SLPlayItf *)pInterface = (SLPlayItf)&o->playVf;
++    } else if(iidIs(iid, gIID_VOLUME.data)) {
++        *(SLVolumeItf *)pInterface = (SLVolumeItf)&o->volumeVf;
++    } else if(iidIs(iid, gIID_SEEK.data)) {
++        *(SLSeekItf *)pInterface = (SLSeekItf)&o->seekVf;
++    } else if(iidIs(iid, gIID_PREFETCHSTATUS.data)) {
++        *(SLPrefetchStatusItf *)pInterface = (SLPrefetchStatusItf)&o->prefetchVf;
++    } else if(iidIs(iid, gIID_METADATAEXTRACTION.data)) {
++        *(SLMetadataExtractionItf *)pInterface = (SLMetadataExtractionItf)&o->metaVf;
++    } else if(iidIs(iid, gIID_ANDROIDSIMPLEBUFFERQUEUE.data)) {
++        *(SLAndroidSimpleBufferQueueItf *)pInterface = (SLAndroidSimpleBufferQueueItf)&o->queueVf;
 +    } else {
 +        return SL_RESULT_PRECONDITIONS_VIOLATED;
 +    }
@@ -439,27 +533,31 @@ index 0000000..a572e2a
 +
 +// ---- Exports ----
 +
-+extern "C" const unsigned char SL_IID_ENGINE[16] = { 0xAE, 0xCB, 0x9F, 0x35, 0x7C, 0x12, 0x7D, 0x98, 0x85, 0x3B, 0x00, 0x9D, 0xEC, 0x7A, 0x9E, 0x44 };
-+extern "C" const unsigned char SL_IID_PLAY[16] = { 0xEF, 0x0A, 0x71, 0x4E, 0xD8, 0xA3, 0x42, 0x74, 0x93, 0x9D, 0x3A, 0xDD, 0x58, 0xC0, 0x34, 0x48 };
-+extern "C" const unsigned char SL_IID_VOLUME[16] = { 0x09, 0x62, 0x91, 0xE0, 0xA5, 0x66, 0x4E, 0x63, 0x90, 0x97, 0x65, 0x0C, 0xEF, 0x12, 0x56, 0x6A };
-+extern "C" const unsigned char SL_IID_SEEK[16] = { 0x87, 0xF1, 0x90, 0x38, 0xF6, 0x59, 0x4A, 0x12, 0x84, 0x8D, 0xA1, 0xDC, 0xA3, 0x60, 0x5C, 0x50 };
-+extern "C" const unsigned char SL_IID_PREFETCHSTATUS[16] = { 0x2E, 0xC9, 0x8F, 0x7B, 0x29, 0x54, 0x4E, 0x0E, 0xB2, 0x0B, 0x48, 0xA9, 0xB9, 0x6A, 0x56, 0xD4 };
-+extern "C" const unsigned char SL_IID_METADATAEXTRACTION[16] = { 0x8F, 0x5D, 0x9E, 0x1F, 0x8F, 0x6B, 0x4A, 0x39, 0x8B, 0x9C, 0x1C, 0xAB, 0x6C, 0x36, 0xA8, 0xB7 };
-+extern "C" const unsigned char SL_IID_ANDROIDSIMPLEBUFFERQUEUE[16] = { 0x19, 0x8A, 0x7F, 0x2B, 0x2B, 0xA7, 0x4C, 0xE8, 0xB3, 0xA1, 0x6A, 0x9A, 0x3C, 0x4D, 0x2B, 0x8F };
++namespace {
++
++const SL_IID gIID_ENGINE = {{ 0xAE, 0xCB, 0x9F, 0x35, 0x7C, 0x12, 0x7D, 0x98, 0x85, 0x3B, 0x00, 0x9D, 0xEC, 0x7A, 0x9E, 0x44 }};
++const SL_IID gIID_PLAY = {{ 0xEF, 0x0A, 0x71, 0x4E, 0xD8, 0xA3, 0x42, 0x74, 0x93, 0x9D, 0x3A, 0xDD, 0x58, 0xC0, 0x34, 0x48 }};
++const SL_IID gIID_VOLUME = {{ 0x09, 0x62, 0x91, 0xE0, 0xA5, 0x66, 0x4E, 0x63, 0x90, 0x97, 0x65, 0x0C, 0xEF, 0x12, 0x56, 0x6A }};
++const SL_IID gIID_SEEK = {{ 0x87, 0xF1, 0x90, 0x38, 0xF6, 0x59, 0x4A, 0x12, 0x84, 0x8D, 0xA1, 0xDC, 0xA3, 0x60, 0x5C, 0x50 }};
++const SL_IID gIID_PREFETCHSTATUS = {{ 0x2E, 0xC9, 0x8F, 0x7B, 0x29, 0x54, 0x4E, 0x0E, 0xB2, 0x0B, 0x48, 0xA9, 0xB9, 0x6A, 0x56, 0xD4 }};
++const SL_IID gIID_METADATAEXTRACTION = {{ 0x8F, 0x5D, 0x9E, 0x1F, 0x8F, 0x6B, 0x4A, 0x39, 0x8B, 0x9C, 0x1C, 0xAB, 0x6C, 0x36, 0xA8, 0xB7 }};
++const SL_IID gIID_ANDROIDSIMPLEBUFFERQUEUE = {{ 0x19, 0x8A, 0x7F, 0x2B, 0x2B, 0xA7, 0x4C, 0xE8, 0xB3, 0xA1, 0x6A, 0x9A, 0x3C, 0x4D, 0x2B, 0x8F }};
++
++} // namespace
++
++extern "C" const SL_IID * SL_IID_ENGINE = &gIID_ENGINE;
++extern "C" const SL_IID * SL_IID_PLAY = &gIID_PLAY;
++extern "C" const SL_IID * SL_IID_VOLUME = &gIID_VOLUME;
++extern "C" const SL_IID * SL_IID_SEEK = &gIID_SEEK;
++extern "C" const SL_IID * SL_IID_PREFETCHSTATUS = &gIID_PREFETCHSTATUS;
++extern "C" const SL_IID * SL_IID_METADATAEXTRACTION = &gIID_METADATAEXTRACTION;
++extern "C" const SL_IID * SL_IID_ANDROIDSIMPLEBUFFERQUEUE = &gIID_ANDROIDSIMPLEBUFFERQUEUE;
 +
 +extern "C" SLresult slCreateEngine(SLObjectItf *pEngine, SLuint32 numOptions, const void *options,
 +                                   SLuint32 numInterfaces, const char **ids, const SLboolean *req) {
 +    (void)numOptions; (void)options; (void)numInterfaces; (void)ids; (void)req;
-+    auto *o = new ObjectImpl();
-+    o->kind = 0;
-+    o->objItf.Realize = obj_Realize;
-+    o->objItf.Resume = obj_Resume;
-+    o->objItf.GetState = obj_GetState;
-+    o->objItf.GetInterface = obj_GetInterface;
-+    o->objItf.RegisterCallback = obj_RegisterCallback;
-+    o->objItf.AbortAsyncOperation = obj_AbortAsyncOperation;
-+    o->objItf.Destroy = obj_Destroy;
-+    *pEngine = (SLObjectItf)&o->objItf;
++    ObjectImpl *o = newObject(0);
++    *pEngine = (SLObjectItf)&o->objVf;
 +    return SL_RESULT_SUCCESS;
 +}
 +
