@@ -1,4 +1,4 @@
-## USAGE OF LLM ## cuz im still a beginer to stuff
+## USAGE OF LLM cuz im still a beginer to stuff
 # HCR2-Linux
 
 Porting **Hill Climb Racing 2** (Android, Cocos2d-x) to run natively on Linux — driving the engine through the `mcpelauncher-hcr` fork's Android shim (`libmcpelauncher`), no emulator. The twist: instead of translating touch, we're going straight for native keyboard/mouse input.
